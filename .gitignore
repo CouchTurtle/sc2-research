@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Personal config / state
+config.toml
+*.local.toml
+.env
+
+# Captures with potentially sensitive content (user's own serial numbers etc.)
+# Sample captures explicitly checked in are under captures/sample_*.bin
+captures/*.bin
+!captures/sample_*.bin
+mapping/
+event_log/
+*.log
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*~
+
+# Build / extraction artifacts
+hu_extracted/
+extracted/
