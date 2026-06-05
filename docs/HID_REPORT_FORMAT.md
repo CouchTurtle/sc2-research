@@ -1,12 +1,10 @@
-# Steam Controller 2 Puck — HID Report Format (Work in Progress)
+# Steam Controller 2 Puck — HID Report Format
 
-Reverse-engineered notes for the Steam Controller 2 "Vigor" wireless dongle
-(Valve, USB `28de:1304`, FCC `2AES41002`). Firmware: `bcdDevice 0.02`
-(pre-update baseline — no firmware update applied at the time of capture).
+> Mostly a verification document — the wire format is in SDL3's open-source [`controller_structs.h`](https://github.com/libsdl-org/SDL/blob/main/src/joystick/hidapi/steam/controller_structs.h) (`TritonMTUFull_t`/`TritonMTUNoQuat_t`). The genuinely novel content here is the **puck's full USB-interface topology, the empirical Lizard-mode reactivation timing, the `0x7b` puck-side status report that SDL3 doesn't define, and the SteamOS access notes**. For a complete what's-public-in-SDL3 catalogue see [`SDL3_REFERENCE.md`](SDL3_REFERENCE.md).
 
-**Privacy warning:** the 24-byte per-device constant at offset `0x1e..0x35`
-and the USB iSerial string are device-unique. Strip both before publishing
-captures publicly.
+Hardware under test: SC2 puck (Valve, USB `28de:1304`, FCC `2AES41002`), pre-update firmware baseline.
+
+**Privacy note:** the USB `iSerial` string is device-unique and should be stripped from any captures you publish. The 0x1e..0x35 IMU block, despite looking like a static per-device constant in idle captures, is not PII — it just reads constant because IMU is OFF by default (see Finding #3 below).
 
 ## USB layout
 
@@ -16,18 +14,25 @@ Composite device with 7 interfaces:
 |------:|------------|--------|--------|-------|-------------------------------------|
 | 0     | CDC ACM    | (ctrl) | (ctrl) | —     | virtual serial — purpose TBD        |
 | 1     | CDC Data   | EP×    | EP×    | —     | serial data (EACCES even as root)   |
-| 2     | HID        | 0x83   | 0x02   | 2 ms  | controller slot 1 (active)          |
-| 3     | HID        | 0x84   | 0x03   | 2 ms  | controller slot 2                   |
-| 4     | HID        | 0x85   | 0x04   | 2 ms  | controller slot 3                   |
-| 5     | HID        | 0x86   | 0x05   | 2 ms  | controller slot 4                   |
+| 2     | HID        | 0x83   | 0x02   | 2 ms  | controller slot 0 (active = `hidraw9` here) |
+| 3     | HID        | 0x84   | 0x03   | 2 ms  | controller slot 1                   |
+| 4     | HID        | 0x85   | 0x04   | 2 ms  | controller slot 2                   |
+| 5     | HID        | 0x86   | 0x05   | 2 ms  | controller slot 3                   |
 | 6     | HID        | 0x87   | 0x06   | 32 ms | dongle status channel               |
 
 Configuration descriptor sets the Remote-Wakeup capability bit.
 
 The puck supports up to 4 concurrent paired controllers, one per HID slot
-(2..5). With one controller paired, only slot 1 (`hidraw9` on this Deck) sees
-state traffic; slots 2..4 (`hidraw10..12`) are silent. `hidraw13` (iface 6) is
-also silent while Steam runs.
+(`esb-controller@0..3` per Proteus-firmware strings — 0-indexed). With one
+controller paired, only slot 0 (`hidraw9` on this Deck) sees state traffic;
+slots 1..3 (`hidraw10..12`) are silent. `hidraw13` (iface 6) is also silent
+in normal use.
+
+Proteus firmware confirms this mapping: it has a `hid_proxy` module with
+endpoint names `HID_PROXY_0..3` (one per ESB slot) plus a `hid-puck` DT-node
+for the puck's own status / control channel. So `hidraw9..12` correspond to
+the four `HID_PROXY_N` endpoints, and `hidraw13` corresponds to `hid-puck`.
+See `FIRMWARE_PROTOCOL.md` §"HID-proxy architecture" for details.
 
 ## Report-ID multiplexing (slot endpoint, HID iface 2)
 
@@ -38,15 +43,15 @@ report descriptor (372 bytes) defines the following:
 |----------:|-----------|----------------:|----------------------------------|
 | `0x40`    | Input     | 6 B             | Lizard-mode mouse (no-Steam fallback) |
 | `0x41`    | Input     | 9 B             | Lizard-mode keyboard                  |
-| `0x42`    | Input     | 54 B            | **Primary controller state**          |
-| `0x43`    | Input     | 15 B            | Periodic telemetry (rare, ~0.4 Hz)    |
-| `0x44`    | Input     | 6 B             | Not yet seen in captures              |
-| `0x45`    | Input     | 46 B            | Not yet seen in captures              |
-| `0x79`    | Input     | 2 B             | Not yet seen in captures              |
-| `0x7b`    | Input     | 13 B            | Battery/link status (~2 Hz)           |
-| `0x80..0x86` | Output | 4–10 B          | Host→device control                   |
-| `0x87..0x89` | Output | 64 B            | Larger host→device payloads           |
-| `0x01,0x02`  | Feature | 64 B            | GET/SET configuration                 |
+| `0x42`    | Input     | 54 B            | **Primary controller state** = `ID_TRITON_CONTROLLER_STATE` per SDL3 |
+| `0x43`    | Input     | 15 B            | **`ID_TRITON_BATTERY_STATUS`** per SDL3 (`TritonBatteryStatus_t`, ~0.4 Hz on this device) |
+| `0x44`    | Input     | 6 B             | In descriptor; never observed; not in SDL3 enum |
+| `0x45`    | Input     | 46 B            | `ID_TRITON_CONTROLLER_STATE_BLE` per SDL3 — state report routed via Bluetooth LE; never seen in our Puck-only captures |
+| `0x46`    | Input     | 2 B             | `ID_TRITON_WIRELESS_STATUS_X` per SDL3 (variant); never observed |
+| `0x79`    | Input     | 2 B             | `ID_TRITON_WIRELESS_STATUS` per SDL3 (`TritonWirelessStatus_t`, 1-byte state); never observed in steady state |
+| `0x7b`    | Input     | 13 B            | **Not in SDL3's enum** — observed at ~2 Hz, likely a Proteus-side puck status report (link quality / paired-slot status); contents are our genuine novel-find. See section below. |
+| `0x80..0x85` | Output | 4–10 B          | Haptic output reports (Rumble / Pulse / Command / LFO_Tone / Log_Sweep / Script) per SDL3 `ValveTritonOutReportMessageIDs` |
+| Feature   | Bi-dir    | 64 B            | `FeatureReportMsg` — get/set settings, attributes, audio, etc. (full enum in [`SDL3_REFERENCE.md`](SDL3_REFERENCE.md)) |
 
 When Steam is running, the stream consists almost entirely of `0x42` reports
 (at ~266 Hz) with `0x7b` reports interleaved every ~500 ms and `0x43`
@@ -55,8 +60,7 @@ appear while Steam is in control — Steam suppresses them.
 
 ## Report `0x42` — controller state (54 bytes = `TritonMTUFull_t`)
 
-Authoritative source: SDL3 `src/joystick/hidapi/steam/controller_structs.h`.
-`#pragma pack(1)` is active — fields are tight, no padding.
+The layout below is **verbatim from SDL3's `controller_structs.h`** (`TritonMTUFull_t`). `#pragma pack(1)` is active — fields are tight, no padding. We're including the table here for convenience and because it has been byte-by-byte checked against ~9000 captured frames on this device.
 
 | Raw offset | Size | Field name              | Notes                                        |
 |------------|------|-------------------------|----------------------------------------------|
@@ -121,9 +125,13 @@ The reports use the standard HID boot-keyboard / boot-mouse layouts (per descrip
 
 Across 180+ seconds of monitoring including a full Steam-stop cycle and idle: **0 bytes ever read from hidraw13**. The vendor interface 6 (32 ms polling) appears to only become active during initial puck↔controller pairing, not for ongoing connect/disconnect events. When a paired controller goes off/on, the host learns about it only through the absence of data on hidraw9-12 (slot-specific timeout), not via an explicit event report.
 
-## Report `0x7b` — battery/link status (13 bytes, ~2 Hz)
+## Report `0x7b` — puck-side status (13 bytes, ~2 Hz)
 
-Tentative interpretation based on 30+ samples across multiple captures:
+**Not present in SDL3's `ETritonReportIDTypes` enum** — SDL3 only knows 0x42, 0x43, 0x45, 0x46, 0x79. So `0x7b` is genuinely undocumented by Valve in the open-source code. Our hypothesis: it's a Proteus-side status report (link statistics / pairing slot info) that the puck firmware emits but SDL3 doesn't consume because it isn't needed for the controller-as-joystick abstraction.
+
+(Earlier drafts of this doc labelled `0x7b` as the battery report — that was wrong; battery is `0x43` per SDL3.)
+
+Tentative byte interpretation based on 30+ samples across multiple captures:
 
 | offset | sample values             | likely meaning                          |
 |--------|---------------------------|-----------------------------------------|
@@ -140,37 +148,55 @@ Tentative interpretation based on 30+ samples across multiple captures:
 | `0x0a` | `3c, 4c, 4e`              | **varies per session** — RSSI / link quality candidate |
 | `0x0b` | `ff`                      | constant `0xff`                         |
 
-## Report `0x43` — telemetry (15 bytes, ~0.4 Hz)
+## Report `0x43` — battery status (15 bytes, ~0.4 Hz)
 
-Largely constant payload, with a 5-byte tail (`0x09..0x0e`) that varies
-between captures. Likely an internal heartbeat / telemetry packet. Not yet
-parsed.
+Per SDL3 (`controller_structs.h:648`) this is `ID_TRITON_BATTERY_STATUS` carrying a `TritonBatteryStatus_t` payload:
+
+```c
+typedef struct {
+    uint8_t  ucChargeState;     // EChargeState: 0=Reset, 1=Discharging, 2=Charging, 3=SrcValidate, 4=ChargingDone
+    uint8_t  ucBatteryLevel;    // 0..100? — SDL passes to SDL_SendJoystickPowerInfo as-is
+    uint16_t sBatteryVoltage;
+    uint16_t sSystemVoltage;
+    uint16_t sInputVoltage;
+    uint16_t sCurrent;
+    uint16_t sInputCurrent;
+    uint16_t sTemperature;
+} TritonBatteryStatus_t;  // 14 bytes payload + 1 report-ID byte = 15 bytes total
+```
+
+Our 30+ samples show the 5-byte tail (`0x09..0x0e`) varying between captures — that's `sCurrent`, `sInputCurrent`, and `sTemperature`, which makes sense (the controller's load varies). Earlier drafts labelled this as "telemetry, not yet parsed" — the SDL3 reference resolves it. To map byte offsets to fields:
+
+| offset (incl. ID) | size | field |
+|---|---|---|
+| `0x00` | 1 | Report ID `0x43` |
+| `0x01` | 1 | `ucChargeState` |
+| `0x02` | 1 | `ucBatteryLevel` |
+| `0x03..0x04` | 2 | `sBatteryVoltage` (LE) |
+| `0x05..0x06` | 2 | `sSystemVoltage` |
+| `0x07..0x08` | 2 | `sInputVoltage` |
+| `0x09..0x0a` | 2 | `sCurrent` |
+| `0x0b..0x0c` | 2 | `sInputCurrent` |
+| `0x0d..0x0e` | 2 | `sTemperature` |
 
 ## Verified behaviours
 
-- **Steam button is fully visible to userspace** while Steam is running. The
-  Steam client does not consume it client-side; bit `0x04` bit 0 stays set
-  for the full duration of the press in the HID stream. → Wake-trigger via
-  long-press is viable.
-- **Sequence number** at byte `0x01` increments by exactly +1 per `0x42`
-  frame across all 9k+ captured frames (no skips, no resets).
-- **Frame rate**: ~266 Hz for `0x42` reports (= ~3.76 ms period).
-- **InHand bit (`0x0b` bit 1)** is a sticky "controller is actively held /
-  awake" indicator. Goes 0→1 when the controller is picked up; stays 1
-  through subsequent button activity. Useful as a power-state proxy.
+- **Steam button visible to userspace** while Steam runs. Steam doesn't consume the bit client-side; byte `0x04` bit 0 stays set for the whole press in the HID stream.
+- **Sequence number** at byte `0x01` increments by exactly +1 per `0x42` frame across all 9k+ captured frames (no skips, no resets).
+- **Frame rate** for `0x42`: ~266 Hz (= ~3.76 ms period) — matches the `frame_rate` attribute (tag 11) returned by `attr_query.py`. Reviewers typically cite **~250 Hz** ([PC Gamer](https://www.pcgamer.com/hardware/game-pads/steam-controller-2026-review/), [DropReference](https://dropreference.com/en/blog/news/steam-controller-2026-price-release-date-specs-reviews)), matching the SDL3 source comment "actually about 4 ms". Our measurement refines that to the firmware's self-reported 266 Hz.
+- **Stick bias drift as a proxy for "in hand"**: `sLeftStickX` typically idles in 89..289 and drifts into 520..690 while the controller is being gripped, which flips the high byte (`0x0b`) between `0x01` and `0x02`. Practically useful as a power-state heuristic, but it isn't a dedicated capacitive flag — the real `LStick_Touch` bit lives at byte `0x05` bit 0 (see Finding #4).
 
 ## Open questions
 
-1. Stick / trigger / touchpad layout in bytes `0x12..0x19` — needs fresh
-   captures with motion.
-2. Full IMU semantics (axes, scale factor, accel vs gyro split) — need a
-   capture with the controller deliberately tilted along each axis.
-3. Meaning of `0x0b` byte beyond bit 1 (high bits are non-zero in idle).
-4. Report `0x44`, `0x45`, `0x79` triggers — never seen yet. Possibly fire on
-   pairing, button-combos, or firmware events.
-5. CDC ACM interface (`ttyACM1`) blocked by SteamOS MAC policy — getting in
-   would require a custom kernel build or running outside the standard
-   userland. Not pursued for now.
+1. Full IMU semantics — once IMU is enabled via `SETTING_IMU_MODE`, the
+   scale factor and axis orientation need an empirical pass (controller
+   deliberately tilted along each axis, gyro spin).
+2. Report `0x44`, `0x45`, `0x79` triggers — present in the HID descriptor,
+   never seen in any of our 9k+ captures. Plausible triggers: pairing
+   events on hidraw13, charge-done, firmware-update completion.
+3. CDC ACM interfaces 0+1 on the puck blocked by SteamOS MAC policy — getting
+   in would require a custom kernel or running outside the standard userland.
+   Not pursued.
 
 ## SteamOS access notes
 
@@ -206,22 +232,24 @@ while True:
     process(report)
 ```
 
-`sc2_decoder.iter_reports_live(fd)` does this for you.
+`sc2.iter_reports_live(fd)` (from the library) does this for you.
 
-## Tools in this directory
+## Related tools
 
-- `sc2_decoder.py` — Python module: stream parser + Report-0x42 decoder.
-- `sc2_live_monitor.py` — CLI live observer; shows button transitions and
-  unknown bit changes in real time.
-- `sc2_wake_daemon.py` — wake-trigger prototype: Steam-button held ≥ N
-  seconds fires a stub `WAKE TRIGGER FIRED` log line.
+- [`sc2/decoder.py`](../sc2/decoder.py) — Python library: stream parser + Report-0x42 decoder.
+- [`tools/live_monitor.py`](../tools/live_monitor.py) — CLI live observer; shows button transitions in real time.
+- [`tools/event_logger.py`](../tools/event_logger.py) — parallel logger across hidraw9-13; report-ID histogram per interface.
+- [`tools/attr_query.py`](../tools/attr_query.py) — Feature-Report attribute queries via `ioctl` (see `FIRMWARE_PROTOCOL.md §Live Feature-Report Channels`).
 
 ## Capture filename convention
 
-- `idle_*.bin` — controller laid flat, untouched, lit-mode off
+- `idle_*.bin` — controller laid flat, untouched
 - `<button>_*.bin` — repeated presses of the named button only
 - `<button>_still_*.bin` — same, with deliberate effort to keep the
-  controller motionless (separates button bits from IMU drift)
-- `<motion>_*.bin` — controller deliberately moved/tilted (for IMU work)
+  controller motionless (avoids the stick-bias drift described in Finding #4
+  showing up as background noise in unrelated bytes)
+- `<motion>_*.bin` — controller deliberately moved/tilted (only meaningful
+  once IMU has been enabled via `SETTING_IMU_MODE`; otherwise the IMU bytes
+  stay constant regardless of motion)
 
 Always include the source `hidrawN` in the filename to keep slots separable.

@@ -3,7 +3,7 @@
 Single targeted capture for SC2 mapping.
 
 Usage:
-    python3 sc2_one_capture.py <name>
+    python3 tools/one_capture.py <name>
 
 Workflow:
   1. you run the command in YOUR terminal
@@ -106,12 +106,12 @@ def quick_diff(name: str):
 def main():
     if len(sys.argv) < 2:
         print("Usage:")
-        print("  python3 sc2_one_capture.py <name>")
-        print("  python3 sc2_one_capture.py <name1> <name2> <name3> ...")
+        print("  python3 tools/one_capture.py <name>")
+        print("  python3 tools/one_capture.py <name1> <name2> <name3> ...")
         print()
         print("Examples:")
-        print("  python3 sc2_one_capture.py X")
-        print("  python3 sc2_one_capture.py X Y LB RB L4 L5 R4 R5")
+        print("  python3 tools/one_capture.py X")
+        print("  python3 tools/one_capture.py X Y LB RB L4 L5 R4 R5")
         sys.exit(1)
 
     OUTDIR.mkdir(exist_ok=True)

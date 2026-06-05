@@ -1,24 +1,22 @@
 """
 Steam Controller 2 Puck HID stream decoder.
 
-The puck (USB 28de:1304) exposes a vendor-defined HID endpoint that multiplexes
-several Report IDs on the same stream. Report 0x42 carries the main controller
-state at ~266 Hz; other IDs appear sporadically.
+Wire format is specified by SDL3 `controller_structs.h` (`TritonMTUFull_t` /
+`TritonMTUNoQuat_t`). This module parses the multiplexed report stream from
+`/dev/hidraw9` — Report 0x42 carries the main controller state at the
+firmware-internal ~266 Hz (`frame_rate` attribute); the puck also emits
+sub-reports 0x43 (~0.4 Hz) and 0x7b (~2 Hz). See `docs/HID_REPORT_FORMAT.md`
+for the full layout and observed behaviour.
 
-Confirmed mappings (validated against ~9k captured Report-0x42 frames):
-  byte 0x00     Report ID (always 0x42 for state frames)
-  byte 0x01     Sequence number — monotonic +1 per frame, wraps at 0xff
-  byte 0x02:0   A button
-  byte 0x02:1   B button
-  byte 0x04:0   Steam button
-  byte 0x0b:1   Capacitive "controller-in-hand" flag (sticky-ish)
-  byte 0x0a..0x11   IMU: 4× int16 little-endian (gyro most likely; small range)
-  byte 0x12..0x19   Sticks/touchpads (zero on every still-controller capture so far)
-  byte 0x1e..0x35   24-byte per-device constant (serial/calibration — PII; do not publish)
+Entry points:
+  decode_state(report)      parse one 54-byte Report 0x42 into a ControllerFrame
+  iter_reports(stream)      yield individual reports from a capture file or stream
+  iter_state_frames(stream) shortcut: yield only the decoded ControllerFrames
+  iter_reports_live(fd)     live iteration from an open hidraw file descriptor
 
-Everything else in bytes 0x03, 0x05..0x09, and the high bits of 0x02/0x04 is
-unmapped. Use SC2Decoder.diff_unknown() during live captures to surface bit
-changes outside the known mappings.
+Note: the IMU block (timestamp, accel, gyro, quaternion at bytes 0x1e..0x35)
+stays OFF by default — those fields read constant until the controller is
+sent a `SETTING_IMU_MODE` Feature-Report. See `docs/FIRMWARE_PROTOCOL.md`.
 """
 
 from __future__ import annotations
@@ -207,9 +205,9 @@ def iter_state_frames(stream) -> Iterator[ControllerFrame]:
             yield decode_state(rep)
 
 
-# Bytes that are known/expected to change frame-to-frame and should not be
-# flagged as "unknown bits changed". Used by diff_unknown().
-# Per SDL3 wire format: seq + analog axes + IMU all vary continuously.
+# Bytes expected to change frame-to-frame and skipped from "unknown bit"
+# diffs: seq (0x01), all analog axes (0x06..0x1d), and the IMU block
+# (0x1e..0x35 — currently OFF and reading constant, but technically in this range).
 _NOISE_BYTES = set(range(0x01, 0x02)) | set(range(0x06, 0x36))
 
 _KNOWN_BITS = {(byte, bit) for byte, bit in KNOWN_BUTTON_BITS.values()}
@@ -218,9 +216,11 @@ _KNOWN_BITS = {(byte, bit) for byte, bit in KNOWN_BUTTON_BITS.values()}
 def diff_unknown(prev: bytes, curr: bytes) -> list[tuple[int, int, int, int]]:
     """Return (byte, bit, old, new) tuples for bit changes outside known regions.
 
-    Skips: sequence number, IMU bytes, the per-device-constant region
-    (0x1e..0x35), and bits that already correspond to a known button.
-    Highlights changes in bytes 0x02..0x09 and 0x12..0x1d.
+    Skips: sequence number, all analog/IMU bytes (0x06..0x35), and bits that
+    already correspond to a button in KNOWN_BUTTON_BITS. Useful during live
+    captures to surface bit changes inside byte 0x03 or the unused high bits
+    of bytes 0x02/0x04/0x05 — i.e., to discover anything not in SDL3's
+    `TritonButtons` enum.
     """
     out: list[tuple[int, int, int, int]] = []
     for i in range(len(curr)):

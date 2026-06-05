@@ -7,7 +7,11 @@ a summary of unique report types seen and where. The 0x42 state reports
 from hidraw9 are saved raw but suppressed from the text log to keep noise down.
 
 Usage:
-    python3 sc2_event_logger.py [seconds]   # default 60s
+    python3 tools/event_logger.py [seconds]   # default 60s
+
+Device paths are hardcoded to /dev/hidraw9..13 (the typical puck enumeration
+on a fresh Steam Deck where the puck is the only USB-HID block after the
+internal devices). Adjust the DEVICES list below if your enumeration differs.
 """
 import os
 import sys

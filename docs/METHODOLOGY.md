@@ -18,55 +18,32 @@ A collection of non-obvious lessons from this Triton/SC2 RE project. Intended fo
 - [Reusable Tooling Patterns](#reusable-tooling-patterns)
 - [Anti-Patterns We Hit](#anti-patterns-we-hit)
 
-## General Strategy
+## Where to look first (for this specific project)
 
-### 1. Authoritative sources before empiricism
+For Triton/SC2 specifically, the three highest-leverage sources are:
+- **SDL3 mainline** (Valve commits the driver directly): `controller_structs.h`, `SDL_hidapi_steam_triton.c` → complete wire format for Report 0x42, all 30 button bits, MTU structs
+- **`~/.local/share/Steam/bin/hardwareupdater/hardwareupdater.x86_64`** — PyInstaller bundle containing the entire update stack in Python 3.12
+- **`~/.local/share/Steam/logs/controller.txt`** — leaks Steam-internal C++ class names like `CGetTritonDonglePairingBondWorkItem`
 
-Before guessing bytes for hours: search for SDK / open-source releases from the vendor. For Valve it was:
-- **SDL3 mainline code** (Valve commits directly to libsdl-org/SDL): `controller_structs.h`, `SDL_hidapi_steam_triton.c` → complete wire format
-- **PyInstaller tools** shipped locally on the device: `hardwareupdater.x86_64` contains the entire update stack in Python
-- **Log files with symbol leaks**: `~/.local/share/Steam/logs/controller.txt` contains C++ class names like `CGetTritonDonglePairingBondWorkItem`
+With those three, empirical captures become **verification**, not discovery.
 
-Empirical captures then become **verification**, not discovery. Saves hours.
+The codenames are layered: marketing "Steam Controller 2" / hardware "Ibex" or "Triton" / firmware-filename "IBEX_FW" / Wireless "ESB". `Triton` and `Ibex` were datamined publicly in Q4 2025; `Proteus` (puck) and `Nereid` (unknown role, `EDeviceType=6`) come out of `hardwareupdater.py` and are first publicly documented in this project. When you have one name, grep every binary for related strings — the others fall out.
 
-### 2. Codename discipline
-
-Vendors often use 3+ names for the same thing. For Triton/SC2:
-- **Marketing**: "Steam Controller 2" (SC2)
-- **Internal codename**: "Triton" (controller), "Proteus" (puck), "Nereid" (unknown)
-- **Firmware filename**: "IBEX" (= Triton internally), "PROTEUS" (= puck)
-- **Wireless protocol**: "ESB" (Enhanced ShockBurst, Nordic Semi)
-
-When you know one name, grep all related binaries for **all the symbols** — additional codenames often pop out as string constants.
-
-### 3. Privacy hygiene
-
-Redact before sharing:
-- Serial numbers (hardware-specific, traceable)
-- USB iSerial strings
-- MAC addresses
-- Per-device calibration data
-
-Not redaction-worthy (even if it looks like it should be):
-- Firmware file hashes (per-build, not per-unit)
-- Hardware IDs (model revisions, not unit serials)
+Privacy: redact USB iSerial strings and per-device serial numbers (`FX*`) before sharing captures. Firmware file hashes and the `hardware_id` integer (model revision) are not PII.
 
 ## Technical Patterns
 
-### Bit-flag analysis is dangerous under `#pragma pack(1)`
+### Concrete case: the "InHand" flag that wasn't
 
-**Cautionary tale**: We initially identified an "InHand" flag at byte 0x0b bit 1 — it looked like a capacitive-touch sensor (0% idle → 100% when controller held).
+We identified what looked like a sticky capacitive-touch flag at byte `0x0b` bit 1 — 0 % at idle, 100 % when controller held. Plausible, internally consistent, "found" within a day.
 
-It was actually **an overflow** from the neighbouring `sLeftStickX` int16 field (bytes 0x0a-0x0b). When the stick bias drifts into range 512-767, the high byte equals `0x02..0x03`, which sets bit 1.
+It was actually the **high byte of `sLeftStickX`** (bytes `0x0a-0x0b`). When the stick is biased into the 512-767 range — which happens systematically while holding the controller because of grip-induced tilt — the high byte is `0x02..0x03`, which sets bit 1.
 
-**Rule**: For any "new flag" that shows a consistent bit pattern, **first** clarify the surrounding-field context:
-- Is it a sign bit of an adjacent int16/int32?
-- Is it a value-range effect (`high byte` of an analog field)?
-- Only when the surrounding field is safely assigned can the bit stand on its own.
+The fix took 5 minutes once the SDL3 struct layout was in front of us; the rabbit hole had taken a day.
 
-`#pragma pack(1)` makes this doubly important — no padding bytes as natural separators.
+Lesson formalised: under `#pragma pack(1)` there are no padding bytes between fields, so the high bits of any non-zero-centred analog field will systematically light up bits in the "next" byte. Any "new bit-flag" that correlates with a known analog signal is the analog signal, not a flag. Confirm the surrounding-field assignment from authoritative layout before naming a bit.
 
-See also: [HID_REPORT_FORMAT.md](HID_REPORT_FORMAT.md) for the resolved layout.
+See also: [HID_REPORT_FORMAT.md](HID_REPORT_FORMAT.md) for the verified layout.
 
 ### Capture-timing sync is critical
 

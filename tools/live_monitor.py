@@ -3,7 +3,7 @@
 Live state-change observer for the Steam Controller 2 Puck.
 
 Usage:
-    python3 sc2_live_monitor.py [--device /dev/hidraw9] [--show-imu]
+    python3 tools/live_monitor.py [--device /dev/hidraw9] [--show-imu]
 
 On SteamOS the `deck` user already has ACL-granted read access to hidraw
 nodes — do NOT prefix with sudo (root is actually blocked here).
