@@ -443,9 +443,20 @@ No hidden Valve-internal helper modules. All SC2-specific logic is in `hardwareu
 
 ## Local Firmware Artifacts
 
-Pre-update state (2026-05-22), in `~/.local/share/Steam/bin/hardwareupdater/`. Note that **Valve has shipped at least one firmware update since this snapshot** (June 2026: charging-issue fix + LED-dimming + trigger-deadzone changes), so the timestamps below are no longer the latest available.
+Pre-update state (2026-05-22), in `~/.local/share/Steam/bin/hardwareupdater/`. Note that **Valve has shipped further firmware updates since this snapshot** (June 2026: charging-issue fix + LED-dimming + trigger-deadzone changes), so the timestamps below aren't the latest available.
 
-The same firmware blobs are also distributed via Valve's CDN inside the `bins_hardware_all` zip at `https://cdn.steamstatic.com/client/`, with every Steam client update across the stable + publicbeta channels. The [`OpenSteamController/Ibex-Firmware`](https://github.com/OpenSteamController/Ibex-Firmware) project tracks that zip over time and exposes a public catalog at <https://opensteamcontroller.github.io/IbexFirmware/> — useful if you want versioned `.fw` blobs without a local Steam install.
+The same firmware blobs are distributed via Valve's CDN inside the `bins_hardware_all` zip at `https://cdn.steamstatic.com/client/` and mirrored byte-identically by the [`OpenSteamController/Ibex-Firmware`](https://github.com/OpenSteamController/Ibex-Firmware) project, which tracks every published version. Direct URLs for the specific files analysed here:
+
+| File | Date | Size | URL |
+|---|---|---|---|
+| `IBEX_FW_69FA5889.fw` | 2026-05-06 | 377 KB | <https://opensteamcontroller.github.io/Ibex-Firmware/Controller/IBEX_FW_69FA5889.fw> |
+| `IBEX_FW_69FE17FF.fw` | 2026-05-08 | 348 KB | <https://opensteamcontroller.github.io/Ibex-Firmware/Controller/IBEX_FW_69FE17FF.fw> |
+| `PROTEUS_FW_69FA587F.fw` | 2026-05-06 | 200 KB | <https://opensteamcontroller.github.io/Ibex-Firmware/Puck/PROTEUS_FW_69FA587F.fw> |
+| `PROTEUS_FW_69FBD45D.fw` | 2026-05-07 | 199 KB | <https://opensteamcontroller.github.io/Ibex-Firmware/Puck/PROTEUS_FW_69FBD45D.fw> |
+
+The filename hex is a Unix timestamp — `0x69FA5889 = 1778221705 = 2026-05-06 13:48 UTC`, etc.
+
+As of June 2026 the Ibex-Firmware archive has 21 IBEX versions (back to `691BB5B3`, Nov 2025) and 19 PROTEUS versions, so byte-diffing across pairs to track changes between updates is trivial.
 
 ```
 IBEX_FW_69FA5889.fw      377 KB  2026-05-06  Triton (Controller)

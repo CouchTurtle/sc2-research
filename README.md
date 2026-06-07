@@ -88,8 +88,16 @@ MIT — see [LICENSE](LICENSE). Some patterns credited inline to the BSD-3-Claus
 
 ## Disclaimer
 
-Hobby project, done with heavy AI assistance (Claude) for hypothesis-testing, cross-referencing, and drafting. The hardware testing, firmware extraction, and packet captures were on my own Steam Deck (SteamOS) with an SC2 + Puck running firmware `bcdDevice 0.02`. Cross-checked against SDL3 source where possible; I may have missed conventions someone with deeper RE background would catch — corrections via issues / PRs welcome.
+Hobby project, done with heavy AI assistance (Claude) for hypothesis-testing, cross-referencing, and drafting. The hardware testing, firmware extraction, and packet captures were on my own Steam Deck (SteamOS) with an SC2 + Puck (USB `bcdDevice 0.02`). Cross-checked against SDL3 source where possible; I may have missed conventions someone with deeper RE background would catch — corrections via issues / PRs welcome.
 
-Baseline note: Valve shipped at least one firmware update in June 2026 (charging-issue fix, LED dimming exposed in settings, trigger-deadzone tweaks) after this snapshot. The protocol layer is expected to be stable; static-analysis offsets are tied to the specific firmware versions analysed.
+Baseline: the firmware blobs analysed here are **`IBEX_FW_69FA5889` + `69FE17FF`** (Triton) and **`PROTEUS_FW_69FA587F` + `69FBD45D`** (Proteus), all from early May 2026. Both pairs are byte-identically mirrored in [`OpenSteamController/Ibex-Firmware`](https://github.com/OpenSteamController/Ibex-Firmware), so anyone can reproduce the analysis without their own Steam install:
+
+```bash
+curl -O https://opensteamcontroller.github.io/Ibex-Firmware/Controller/IBEX_FW_69FE17FF.fw
+curl -O https://opensteamcontroller.github.io/Ibex-Firmware/Puck/PROTEUS_FW_69FBD45D.fw
+python3 tools/analyze_fw.py IBEX_FW_69FE17FF.fw
+```
+
+Valve has shipped further updates since (the June 2026 release added LED dimming in settings + trigger-deadzone tweaks). The protocol layer is expected to be stable across these; static-analysis offsets are tied to the specific FW versions above.
 
 No proprietary code or firmware blobs are redistributed here — for the blobs see [`OpenSteamController/Ibex-Firmware`](https://github.com/OpenSteamController/Ibex-Firmware). No affiliation with Valve.
