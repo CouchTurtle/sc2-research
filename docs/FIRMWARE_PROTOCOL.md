@@ -9,9 +9,9 @@
 - Steam ships **`hardwareupdater.x86_64`** with the client — a PyInstaller bundle containing the entire Triton/Proteus update logic in Python 3.12.
 - Update workflow is **PREP → UPDATE → REBOOT**: HID Feature-Report `0x90` switches the device to bootloader (new USB PID), CDC ACM serial then carries HDLC-framed firmware chunks, final `MESSAGE_RESET` returns to normal mode.
 - Wire framing: `SOF=0xAD`, `EOF=0xAE`, `ESCAPE=0xAC` (with escape table `0xAC|0xAD|0xAE → 0xAC 0x00|0x01|0x02`).
-- Firmware files have a 32-byte header (`magic`, `payload_size`, `checksum`, 20 bytes reserved) followed by raw ARM Cortex-M payload. Magic is `0xD2D86467` for Triton, `0x2E795631` for Proteus.
+- Firmware files have a 32-byte header (`magic`, `payload_size`, **CRC32 at offset `0x08`**, 20 bytes reserved) followed by raw ARM Cortex-M payload. Magic is `0xD2D86467` for Triton, `0x2E795631` for Proteus.
 - Same Feature-Report channel is used live for **read-only attribute queries**: `fr_id=2 op=0x83` returns Puck info, `fr_id=1 op=0x81` is ESB-routed to the Controller.
-- Firmware static analysis suggests **Nordic nRF52840** (Triton) and **nRF52833/820** (Proteus), running **Zephyr RTOS**, built with **ARM GCC 14 + newlib** on a Jenkins CI.
+- Firmware static analysis **confirms Nordic nRF52840 for BOTH Triton and Proteus** via Zephyr Device-Tree node addresses leaked in rodata (including `gpio@50000300` for GPIO Port P1 and `i2s@40025000` — both exclusive to nRF52840 in the nRF52 series). Running **Zephyr OS v3.7.99** on **Nordic nRF Connect SDK v2.9.0**, built with **ARM GCC 14 + newlib** on a Jenkins CI. External I2C peripherals identified: SLG4L48185 GreenPAK (`0x10`), "Olympus" custom trackpad IC (`0x2C`), MPS MP2733 charger (`0x4B`), ST LSM6DSV16X 6-axis IMU with on-chip Smart Fusion Engine (`0x6A`).
 
 ## Table of Contents
 
