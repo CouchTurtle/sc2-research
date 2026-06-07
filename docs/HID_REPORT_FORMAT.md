@@ -1,8 +1,8 @@
-# Steam Controller 2 Puck — HID Report Format
+# SC2 Puck — HID report format
 
-> Mostly a verification document — the wire format is in SDL3's open-source [`controller_structs.h`](https://github.com/libsdl-org/SDL/blob/main/src/joystick/hidapi/steam/controller_structs.h) (`TritonMTUFull_t`/`TritonMTUNoQuat_t`). The genuinely novel content here is the **puck's full USB-interface topology, the empirical Lizard-mode reactivation timing, the `0x7b` puck-side status report that SDL3 doesn't define, and the SteamOS access notes**. For a complete what's-public-in-SDL3 catalogue see [`SDL3_REFERENCE.md`](SDL3_REFERENCE.md).
+> Mostly a verification doc. The wire format is in SDL3's [`controller_structs.h`](https://github.com/libsdl-org/SDL/blob/main/src/joystick/hidapi/steam/controller_structs.h) (`TritonMTUFull_t` / `TritonMTUNoQuat_t`). Beyond that, this doc covers the puck's full USB-interface topology, observed Lizard-mode reactivation timing, the `0x7b` puck-side status report (not in SDL3), and a few SteamOS access notes. For everything that's already in SDL3, see [`SDL3_REFERENCE.md`](SDL3_REFERENCE.md).
 
-Hardware under test: SC2 puck (Valve, USB `28de:1304`, FCC `2AES41002`), pre-update firmware baseline.
+Hardware under test: SC2 puck (Valve, USB `28de:1304`, FCC `2AES41002`) on a Steam Deck running SteamOS, pre-update firmware baseline.
 
 **Privacy note:** the USB `iSerial` string is device-unique and should be stripped from any captures you publish. The 0x1e..0x35 IMU block, despite looking like a static per-device constant in idle captures, is not PII — it just reads constant because IMU is OFF by default (see Finding #3 below).
 

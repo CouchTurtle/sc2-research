@@ -1,14 +1,12 @@
-# Steam Controller 2 (Triton) — Hardware Notes Relevant to the RE Work
+# SC2 hardware notes
 
-> Not a general spec sheet. Wikipedia, iFixit, and reviews cover the headline hardware specs — this doc only contains the parts that were *needed for the RE work*, plus the items we extracted from firmware-string analysis that aren't in any public teardown (MPS MP2733 charger, fuel-gauge IC, Zephyr RTOS, ARM GCC 14 toolchain, ESB slot strings). The chip-identification section reconciles iFixit's nRF52833 reading with our static analysis.
-
-The headline specs (TMR sticks, Hall-effect triggers, 4× LRA motors, 6-axis IMU, 18 IR LEDs, 8.39 Wh battery, ~35-hour rated life, $99 launch price) are correct as published; we confirmed them but they aren't novel here.
+> Not a spec sheet. Wikipedia, iFixit, and reviews cover the published specs (TMR sticks, Hall-effect triggers, 4× LRA motors, 6-axis IMU, 18 IR LEDs, 8.39 Wh battery, ~35-hour rated life, $99). This doc collects the bits that were actually needed for the RE work plus a handful of components surfaced by firmware-string analysis that aren't in any public teardown (MPS MP2733 charger, ST LSM6DSV16X IMU, Olympus trackpad IC, SLG4L48185 GreenPAK, Zephyr RTOS, ARM GCC 14 toolchain).
 
 ## Chip identification
 
 **Both Triton (controller) and Proteus (puck) use the Nordic nRF52840** — the largest nRF52-series variant (256 KB SRAM / 1 MB Flash, dual GPIO ports, I2S peripheral).
 
-[iFixit and PC Gamer teardowns](https://www.ifixit.com/Device/Steam_Controller_%282nd_Generation%29) read the controller's chip markings as nRF52833 with hedged language ("appears to be"). Our firmware analysis disagrees: IBEX_FW and PROTEUS_FW both contain Zephyr Device-Tree node addresses for **`gpio@50000300` (GPIO Port P1, only present on nRF52840) and `i2s@40025000` (I2S, exclusive to nRF52840)**. The firmware reads/writes those exact register addresses — the silicon must have those peripherals or the device wouldn't boot. Treating firmware-DT evidence as authoritative over hedged chip-marking reads.
+[iFixit and PC Gamer teardowns](https://www.ifixit.com/Device/Steam_Controller_%282nd_Generation%29) read the controller's chip markings as nRF52833 with hedged language ("appears to be"). The firmware tells a different story: IBEX_FW and PROTEUS_FW both contain Zephyr Device-Tree node addresses for `gpio@50000300` (GPIO Port P1, only on nRF52840) and `i2s@40025000` (I2S, exclusive to nRF52840). The silicon has to respond to those exact register addresses or the device wouldn't boot, so the DT addresses are the more reliable signal.
 
 See [`docs/FIRMWARE_PROTOCOL.md`](FIRMWARE_PROTOCOL.md) §"Hardware inference" for the full DT-address breakdown.
 
