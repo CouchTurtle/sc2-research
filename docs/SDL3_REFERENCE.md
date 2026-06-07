@@ -1,10 +1,8 @@
-# SDL3 Public Reference — Everything Triton-Related
+# SDL3 reference — Triton-related content
 
-A consolidated reference of what SDL3's open-source code publicly says about the Steam Controller 2 ("Triton") and its dongles. Everything here is in the public Valve commit `1998b6504` (Sam Lantinga, Nov 12 2025) and the longer-standing shared headers from Valve.
+What SDL3's open-source code says about the Steam Controller 2 (Triton) and its dongles. Most of it lives in Valve's commit `1998b6504` (Sam Lantinga, Nov 12 2025) plus the longer-standing shared headers.
 
-Cited from a fresh clone of [`libsdl-org/SDL`](https://github.com/libsdl-org/SDL) `main`, May 2026.
-
-If something in this doc surprises you, you can verify it yourself by `grep`ing the SDL repo. Several of our own earlier "first publicly documented" claims turned out to be in here — this reference file is the cross-check so we don't make that mistake again.
+Cited from a clone of [`libsdl-org/SDL`](https://github.com/libsdl-org/SDL) `main`, May 2026. To verify anything here, `grep` the SDL repo directly.
 
 ## Files of interest
 

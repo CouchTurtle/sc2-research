@@ -1,15 +1,15 @@
-# Reverse-Engineering Methodology & Lessons Learned
+# RE notes & lessons
 
-A collection of non-obvious lessons from this Triton/SC2 RE project. Intended for other reverse-engineers, or as a reminder when starting similar hardware projects.
+Notes from working through the Triton/SC2 firmware and HID stack on a Steam Deck. Mostly things that weren't obvious at the start and would have saved time if known up front.
 
-## TL;DR
+## Summary
 
-- **Look for vendor SDK / open-source contributions first** — Valve commits Triton driver code directly to SDL3, which gives you the entire wire format for free.
-- **Codenames are layered** — marketing name ≠ internal name ≠ firmware filename. Find one and grep for all the others.
-- **`#pragma pack(1)` lies** about field boundaries: high bytes of an `int16` can look like a fake flag in the next byte. Always confirm the surrounding field before declaring a single bit.
-- **Capture-timing sync is fragile** — auto-countdown + background process = invalid data when the user can't see the clock. Use interactive Enter or a foreground tool.
-- **Bytecode disassembly works without a decompiler** — `marshal.loads()` + `dis.dis()` from Python's stdlib is enough to reverse PyInstaller bundles when no decompiler supports the target Python version.
-- **SteamOS sandbox quirks** matter for tooling: the `deck` user has more HID access than `root` via ACLs.
+- Vendor SDK / open-source contributions first. Valve commits Triton driver code directly to SDL3, so the wire format is free.
+- Codenames are layered — marketing name ≠ internal name ≠ firmware filename. Find one, grep for the others.
+- `#pragma pack(1)` makes adjacent-field bits look like flags. Confirm the surrounding field before naming a bit.
+- Capture-timing sync is fragile — auto-countdown + background process = invalid data when the user can't see the clock. Use interactive Enter or a foreground tool.
+- Bytecode disassembly works without a decompiler: `marshal.loads()` + `dis.dis()` from Python's stdlib are enough for PyInstaller bundles.
+- SteamOS hidraw ACLs: the `deck` user has more access than `root`. Don't `sudo`.
 
 ## Table of Contents
 
