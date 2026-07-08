@@ -9,8 +9,8 @@
 - Update workflow: PREP → UPDATE → REBOOT. HID Feature-Report `0x90` switches the device to bootloader (new USB PID), then CDC ACM serial carries HDLC-framed firmware chunks, and a final `MESSAGE_RESET` returns to normal mode.
 - Wire framing: `SOF=0xAD`, `EOF=0xAE`, `ESCAPE=0xAC` (escape table `0xAC|0xAD|0xAE → 0xAC 0x00|0x01|0x02`).
 - Firmware files: 32-byte header (`magic`, `payload_size`, CRC32 at offset `0x08`, 20 bytes reserved) followed by the ARM Cortex-M payload. Magic `0xD2D86467` for Triton, `0x2E795631` for Proteus.
-- The same Feature-Report channel is reused live for read-only attribute queries: `fr_id=2 op=0x83` returns Puck info, `fr_id=1 op=0x81` is ESB-routed to the Controller.
-- Static analysis points to Nordic nRF52840 for both Triton and Proteus, via Zephyr Device-Tree node addresses in rodata (`gpio@50000300` for Port P1 and `i2s@40025000`, both exclusive to nRF52840 in the nRF52 series). Zephyr v3.7.99 on Nordic nRF Connect SDK v2.9.0, ARM GCC 14 + newlib on Jenkins. External I2C peripherals: SLG4L48185 GreenPAK (`0x10`), "Olympus" trackpad IC (`0x2C`), MPS MP2733 charger (`0x4B`), ST LSM6DSV16X 6-axis IMU with on-chip Smart Fusion Engine (`0x6A`).
+- The same Feature-Report channel is reused live for read-only attribute queries: `fr_id=2 op=0x83` returns Puck info, `fr_id=1 op=0x83` is ESB-routed to the Controller (`fr_id` selects the target, `op=0x83` = GET_ATTRIBUTES_VALUES for both).
+- Static analysis points to Nordic **nRF52833** for both Triton and Proteus (512 KB flash / 128 KB RAM; matches the iFixit/PC Gamer teardowns and the `mwdmwd/sc26re` firmware target). Zephyr v3.7.99 on Nordic nRF Connect SDK v2.9.0, ARM GCC 14 + newlib on Jenkins. External I2C peripherals: SLG4L48185 GreenPAK (`0x10`), "Olympus" trackpad IC (`0x2C`), MPS MP2733 charger (`0x4B`), ST LSM6DSV16X 6-axis IMU with on-chip Smart Fusion Engine (`0x6A`).
 
 ## Table of Contents
 
@@ -30,7 +30,7 @@
 - [Update Wire Protocol](#update-wire-protocol)
 - [Live Feature-Report Channels](#live-feature-report-channels-empirically-verified)
 - [Device-Info Attribute Table](#device-info-attribute-table)
-- [Setting IDs](#setting-ids)
+- [Feature-report opcodes vs settings](#feature-report-opcodes-vs-settings)
 - [PyInstaller Bundle Contents](#pyinstaller-bundle-contents)
 - [Local Firmware Artifacts](#local-firmware-artifacts)
 - [CLI](#cli)
@@ -161,7 +161,7 @@ flowchart TB
     T --> T_ESB["Triton_ESB (4)"]
     P --> P_BL["Proteus_BL (1)"]
     P --> P_USB["Proteus_USB (5)"]
-    N["Nereid_USB (6)<br/>unknown — possibly<br/>Steam Frame Tracker"]
+    N["Nereid_USB (6)<br/>2nd dongle, parallel to Proteus<br/>(likely Steam-Machine-integrated — see Codenames)"]
 ```
 
 ## Transport Architecture
@@ -286,6 +286,8 @@ Normal reboot (Triton only, from `reboot()`):
 | `0x1238` | `MESSAGE_PROVISION` | Provisioning operation |
 | `0` | `RSP_ACK` | Successful response |
 
+Confirmed against [`mwdmwd/sc26re` `flash.py`](https://github.com/mwdmwd/sc26re/blob/main/flash.py): identical IDs `0x1233`–`0x1238` (it names `0x1238` `MESSAGE_UICR_PROVISION`).
+
 ## Firmware Magic Header
 
 Each `.fw` file starts with a 4-byte magic (uint32 LE):
@@ -294,8 +296,8 @@ Each `.fw` file starts with a 4-byte magic (uint32 LE):
 |---|---|---|
 | `0x2E795631` | `PROTEUS_FW_MAGIC` | ✓ matches `31 56 79 2e` in PROTEUS_FW |
 | `0xD2D86467` | `TRITON_FIRMWARE_HEADER_MAGIC` | ✓ matches `67 64 d8 d2` in IBEX_FW |
-| `0xAC2C2D29` | `PROVISIONING_MAGIC` | for provisioning blobs |
-| `0xE873BD47` | `MSG_PROVISION_MAGIC` | for provision messages on-wire |
+| `0xAC32A429` | `PROVISIONING_MAGIC` (common) | provisioning blobs; Proteus also accepts `0xAC388E29`. Confirmed against [`mwdmwd/sc26re` `flash.py`](https://github.com/mwdmwd/sc26re/blob/main/flash.py). |
+| `0xE86DA4C7` | `UICR_PROVISION_KEY` | key prefixing the 128-byte customer block in a `MESSAGE_UICR_PROVISION` (`0x1238`) write |
 
 ## Firmware File Format
 
@@ -315,7 +317,7 @@ struct FirmwareMetadata {            // 32 bytes total
 };
 ```
 
-The [`OpenSteamController/Ibex-Firmware`](https://github.com/OpenSteamController/Ibex-Firmware) archive project independently confirms this layout — they catalog every `.fw` blob shipped via Valve's CDN and validate the CRC32 on import.
+Two independent projects confirm this layout: the [`OpenSteamController/Ibex-Firmware`](https://github.com/OpenSteamController/Ibex-Firmware) archive validates the CRC32 on import, and [`mwdmwd/sc26re`'s `package-ibex-fw.py`](https://github.com/mwdmwd/sc26re/blob/main/scripts/package-ibex-fw.py) *builds* the header (8× LE uint32: magic, payload_size, CRC32 at `0x08`, then 5 reserved words) and links its payload at `0x8000`.
 
 Verified against all 4 local FW files: `total_size == 32 + payload_size` matches perfectly.
 
@@ -365,10 +367,21 @@ Via `ioctl HIDIOCSFEATURE` + `HIDIOCGFEATURE` on hidraw9 (Puck PID 0x1304):
 | Channel | fr_id | op | Routing |
 |---|---|---|---|
 | **Puck attributes (local)** | 2 | 0x83 | direct to puck firmware |
-| **Controller attributes (ESB-routed)** | 1 | 0x81 | via ESB radio to the paired controller |
+| **Controller attributes (ESB-routed)** | 1 | 0x83 | via ESB radio to the paired controller — same opcode as the puck; `fr_id` selects the target |
 | Status query (unclear) | 1 | 0x8d | returns `type=0x89, len=3, 00 00 00` |
 
-Query wire format: `pad_hid_fr(bytes([fr_id, op]))` (64-byte padded).
+Query wire format: `pad_hid_fr(bytes([fr_id, op]))` (64-byte padded). (An earlier draft listed the controller channel as `op=0x81`; that was wrong — `op=0x83` = GET_ATTRIBUTES_VALUES is used for both targets, as in `tools/attr_query.py`.)
+
+### Host → controller relay (feature report `0x01`)
+
+The `fr_id=1` path is a general relay, not only attribute reads: Steam writes feature report `0x01` and the puck forwards it over the ESB radio to the controller as an `E3` frame. The [`safijari/openpuck`](https://github.com/safijari/openpuck/blob/main/docs/PROTOCOL.md) DIY-puck project documents this in detail, including which settings-register writes actually take effect ("land") on the controller:
+
+| Register (in a `0x87 SET_SETTINGS` payload) | Meaning | Cross-check |
+|---|---|---|
+| `0x2D` (= 45) | LED brightness | matches settings-registry ID 45 `led_user_brightness` |
+| `0x30` (= 48) | IMU / gyro subsystem enable | matches settings-registry ID 48 `imu_mode` |
+
+The register↔setting-ID agreement between openpuck's relay analysis and `mwdmwd`'s settings registry is independent corroboration of both. (openpuck notes its own PROTOCOL.md is partly stale vs its code and that the RF layer is LLM-assisted RE, so treat the deeper relay/RF details as one project's reconstruction.)
 
 Response wire format (65-byte buffer):
 ```
@@ -423,14 +436,29 @@ Generic pattern for attribute reads via Feature-Report:
 
 (Tags 3, 6, 7, 8 not in dispatch — reserved.)
 
-## Setting IDs
+## Feature-report opcodes vs settings
 
-| Setting-ID | Value | Meaning |
-|---|---|---|
-| `0x90` | (1 or 2) | Reboot to Bootloader |
-| `0x95` | 1 | Normal Reboot (Triton only) |
+Two different things share the Feature-Report channel and were conflated in earlier drafts of this doc:
 
-Setting-IDs are sent via Feature-Report-ID `0x01` (default) or `0x02` (newer Proteus with bcd_version=2). Payload bytes: `b'<value><setting_id>'`.
+**(a) Message opcodes** — the *second* byte of a feature report (`[report_id][opcode][len][payload…]`). `0x90` (REBOOT_TO_BOOTLOADER / ISP) and `0x95` (FIRMWARE_UPDATE_REBOOT) are **opcodes, not settings**. The updater sends them as `pad_hid_fr(b'\x01\x90')` = report-id `0x01`, opcode `0x90`. Full opcode list in the **Operation IDs** section below.
+
+**(b) Settings registry** — key/value settings addressed by a numeric ID, read/written via opcodes `SET_SETTINGS_VALUES` (`0x87`) / `GET_SETTINGS_VALUES` (`0x89`) as 3-byte `[id][value_le16]` entries. The [`mwdmwd/sc26re`](https://github.com/mwdmwd/sc26re/blob/main/app/src/ibex_settings_registry.c) firmware enumerates **83 settings (ID 0–82)**; most match SDL's `SETTING_*` names, a handful are OFW-specific. Highlights:
+
+| ID | Name | Default | Range |
+|---|---|---|---|
+| 9  | `lizard_mode` | 1 | 0–1 |
+| 44 | `led_baseline_brightness` | 50 | 0–100 |
+| 45 | `led_user_brightness` | 50 | 0–100 |
+| 48 | `imu_mode` | 0 | 0–32767 |
+| 50 | `sleep_inactivity_timeout` | 900 | 0–32767 |
+| 64 | `frame_rate` | 4 | 1–16 |
+| 68 | `trigger_threshold_percent` | 90 | 40–99 |
+| 70 | `haptics_enabled` | 1 | 0–2 |
+| 76 | `haptic_master_gain_db` | -3 | -24–6 |
+| 79 | `haptic_intensity` | 2 | 1–4 |
+| 80 | `stabilizer_enabled` | 1 | 0–2 |
+
+(Full 83-entry table with defaults/ranges in the linked file.)
 
 ## PyInstaller Bundle Contents
 
@@ -532,19 +560,21 @@ From vector-table analysis across all 4 .fw files:
 | Registered IRQs | 63 / 63+ | 63+ |
 | ASCII printable in code | ~36% | ~30% |
 
-**Nordic nRF52840 confirmed for BOTH Triton and Proteus** (correcting the earlier nRF52833 inference).
+**Nordic nRF52833 for both Triton and Proteus** — matching the iFixit / PC Gamer teardowns. (An earlier version of this doc claimed nRF52840 and framed it as "correcting the teardowns"; **that was our mistake** — the correction has been reverted. See the methodology note at the end of this section.)
 
-[iFixit and PC Gamer teardowns](https://www.ifixit.com/Device/Steam_Controller_%282nd_Generation%29) read the controller's chip markings as Nordic nRF52833, with hedged language ("appears to be"). **The firmware tells a different story.** The IBEX_FW rodata contains Zephyr Device-Tree node addresses that the firmware reads/writes against — these have to match the real silicon for the device to work. The decisive ones:
+[iFixit and PC Gamer teardowns](https://www.ifixit.com/Device/Steam_Controller_%282nd_Generation%29) read the controller's chip markings as Nordic nRF52833. The firmware is **consistent with that**. The IBEX_FW rodata contains Zephyr Device-Tree node addresses the firmware reads/writes against:
 
 | DT node | Address | nRF register | Significance |
 |---|---|---|---|
-| `gpio@50000300` | `0x50000300` | **GPIO Port P1** | Only nRF52840 has a second GPIO port (P1). nRF52833/52820/52811 have P0 only. |
-| `i2s@40025000` | `0x40025000` | **I2S Peripheral** | I2S is exclusive to nRF52840 in the nRF52 series. |
-| `clock@40000000`, `uart@40002000`, `i2c@40003000`/`@40004000`, `adc@40007000`, `timer@40009000`/`@4001a000`, `temp@4000c000`, `random@4000d000`, `watchdog@40010000`, `pwm@4001c000`/`@40021000`/`@40022000`, `flash-controller@4001e000`, `gpio@50000000` | various | Standard nRF52 family | Match nRF52 register map; consistent with nRF52840 (and others) |
+| `gpio@50000300` | `0x50000300` | GPIO Port P1 | Present on **both** nRF52833 and nRF52840 — both have a second GPIO port. Does **not** distinguish them. |
+| `i2s@40025000` | `0x40025000` | I2S peripheral | Present on **both** nRF52833 and nRF52840 (and nRF52832). Does **not** distinguish them. |
+| `clock@40000000`, `uart@40002000`, `i2c@40003000`/`@40004000`, `adc@40007000`, `timer@40009000`/`@4001a000`, `temp@4000c000`, `random@4000d000`, `watchdog@40010000`, `pwm@4001c000`/`@40021000`/`@40022000`, `flash-controller@4001e000`, `gpio@50000000`, `usbd@40027000` | various | Standard nRF52 family | Match the nRF52 register map; consistent with nRF52833. |
 
-Plus the driver names confirm the Nordic SDK: `adc_nrfx_saadc`, `i2c_nrfx_twim`, `pwm_nrfx`, `uart_nrfx_uarte` — all from the nRFx HAL.
+**What would actually distinguish an nRF52840** — QSPI, CryptoCell (CC310), 1 MB flash, 256 KB RAM — does **not** appear in either firmware. The images fit 512 KB flash / 128 KB RAM, and the observed stack-pointers (~96 KB into SRAM) fit the 128 KB part. Driver names confirm the Nordic SDK regardless: `adc_nrfx_saadc`, `i2c_nrfx_twim`, `pwm_nrfx`, `uart_nrfx_uarte`.
 
-Vector-table stats (for completeness):
+**Independent confirmation:** the [`mwdmwd/sc26re`](https://github.com/mwdmwd/sc26re) firmware-reimplementation project builds its Zephyr board for `steam_controller_ibex/nrf52833` (512 KB / 128 KB, J-Link device `nRF52833_xxAA`) and flashes it onto real controllers; it also runs the stock Ibex payload on a BBC micro:bit v2 as a "same SoC" development target — the micro:bit v2 is an nRF52833.
+
+Vector-table stats:
 
 | Property | IBEX (Triton/Controller) | PROTEUS (Puck) |
 |---|---|---|
@@ -553,9 +583,7 @@ Vector-table stats (for completeness):
 | Flash base | `0x0000_0000` | `0x0000_0000` |
 | Registered IRQs | 63 / 63+ | 63+ |
 
-Both stack-tops fit comfortably within the nRF52840's 256 KB SRAM — the smaller stack on the Puck just reflects the smaller firmware (no IMU, no trackpads, no battery management to handle). **The Puck (Proteus) is also nRF52840** based on the same DT-address evidence in PROTEUS_FW rodata (`gpio@50000300` is present).
-
-**Why this matters:** iFixit's chip-marking read was hedged. Firmware-DT addresses are authoritative — the silicon must respond to those exact register addresses or the firmware wouldn't function. We're tagging this as a correction of the public iFixit / PC Gamer claim, not a contradiction of our previous static-analysis position, which was already "consistent with both 833 and 840".
+**Methodology note (kept as a lesson):** peripheral-presence in a firmware Device-Tree only narrows the SoC to a *family*. `gpio1` and `i2s` are shared across most of the nRF52 line, so they cannot separate the nRF52833 from the nRF52840 — only the *absent* high-end peripherals (QSPI, CryptoCell) and the flash/RAM sizes do. The earlier "it must be a 52840" conclusion over-read that evidence and inverted a correct teardown. Lesson: a present peripheral proves a lower bound on the family, not a specific part; the *absence* of the top-end peripherals is the load-bearing signal.
 
 ### Standard Cortex-M vector table
 
@@ -621,7 +649,7 @@ PROTEUS_FW has a different, much smaller DT map — confirms what's NOT on the P
 - **Has** `ec-button-interface@50` at I2C `0x50` — likely a small Embedded Controller / button-readout IC for the Puck's physical buttons (pairing button)
 - **Has** logical nodes `esb-controller@0..3` (matching SDL3 driver expectation of 4 slots) and `ec-input-tap@0..3` (input-tap slots, one per slot)
 - **Has** `udc_nrfx` (USB Device Controller driver) and `i2c_nrfx_twis` (I2C **slave** mode) — Puck acts as I2C slave on at least one bus, presumably to expose itself to a host MCU when docked
-- Plus the standard nRF52840 peripherals (`gpio@50000300`, `usbd@40027000`, etc.)
+- Plus the standard nRF52833 peripherals (`gpio@50000300`, `usbd@40027000`, etc.)
 
 ### RTOS + SDK + toolchain — exact versions
 
@@ -721,7 +749,25 @@ ST_SHUTDOWN_LOW_BATT_entry
 
 ## Operation IDs (additional, from `%s: GET/SET: ID_*` format strings in IBEX_FW)
 
-Beyond the shared `FeatureReportMessageIDs` enum (covered in [`SDL3_REFERENCE.md`](SDL3_REFERENCE.md)), the Triton firmware's internal log strings reveal additional operation IDs not present in SDL3:
+Beyond the shared `FeatureReportMessageIDs` enum (covered in [`SDL3_REFERENCE.md`](SDL3_REFERENCE.md)), the Triton firmware's internal log strings reveal additional operation IDs not present in SDL3. Concrete opcode values, cross-referenced against [`mwdmwd/sc26re`'s `valve_feature.h`](https://github.com/mwdmwd/sc26re/blob/main/app/src/valve_feature.h) (which enumerates the full set):
+
+| Opcode | Name |
+|---|---|
+| `0x83` | GET_ATTRIBUTES_VALUES |
+| `0x87` / `0x89` | SET / GET_SETTINGS_VALUES |
+| `0x8E` | LOAD_DEFAULT_SETTINGS |
+| `0x90` | REBOOT_TO_ISP (bootloader) |
+| `0x95` | FIRMWARE_UPDATE_REBOOT |
+| `0x9F` | TURN_OFF_CONTROLLER |
+| `0xA1` | GET_DEVICE_INFO |
+| `0xAE` | GET_STRING_ATTRIBUTE |
+| `0xBA` | GET_CHIPID (nRF FICR device ID) |
+| `0xBE` | GET_BATTERY_DATA |
+| `0xC5` / `0xE9` | SET / GET_LED_COLOR |
+| `0xED` / `0xEE` / `0xEF` / `0xF0` | READ / STAGE / COMMIT / DELETE_SETTING |
+| `0xFE` | WRITE_PROVISIONING |
+
+Notes on the more interesting ones:
 
 | ID name | Action |
 |---|---|
@@ -842,3 +888,4 @@ The 11 added strings include several short scrambled-looking strings: `zohejfgla
 - Serial numbers (`FX*`) are device-unique → redact when sharing docs
 - `hardwareupdater.cfg` is not PII, but it captures the current update state
 - USB iSerial strings of the devices should also be redacted
+- The 24-byte **ESB bond record** (readable via feature-report `0xA3`, stored at settings key `esb/bond`) is the real device-identifying blob: `proteus_uuid` (4 B) + `ibex_uuid` (4 B) + **controller serial in ASCII** (≤16 B). Confirmed by both [`mwdmwd/sc26re`](https://github.com/mwdmwd/sc26re) and [`safijari/openpuck`](https://github.com/safijari/openpuck). Redact it too.

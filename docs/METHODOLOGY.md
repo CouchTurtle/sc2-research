@@ -128,7 +128,7 @@ Use with `os.open(O_RDWR)` and `fcntl.ioctl` directly. Buffer format: first byte
 
 For a wireless dongle: the same HID path is often a **bidirectional multiplexer** between local dongle firmware and the wireless-attached device. For Triton/Proteus:
 - `fr_id=2` with `op=0x83` → response from the puck itself (local)
-- `fr_id=1` with `op=0x81` → response from the controller (routed via ESB)
+- `fr_id=1` with `op=0x83` → response from the controller (routed via ESB) — same opcode, `fr_id` selects the target
 
 → Collect ALL fr_id/op combinations via brute-force (0x80..0xCF, both fr_ids). What comes back tells you which channels exist.
 
@@ -154,5 +154,6 @@ All reusable for other vendor-specific HID devices.
 4. ❌ `pkill -f "steam.sh|..."` executed — pkill matched its own shell command line and killed the controlling bash
 5. ❌ `sudo` tried for hidraw access — worse than without sudo due to SteamOS ACLs
 6. ❌ A 24-byte "Per-Device-Constant" identified as calibration — was actually the IMU+Quat block in OFF mode
+7. ❌ Claimed nRF52840, "correcting" the teardowns, from the `gpio1`/`i2s` Device-Tree nodes — but those peripherals exist on the nRF52833 too. A *present* peripheral only proves a family lower-bound; the *absent* high-end ones (QSPI, CryptoCell) plus flash/RAM size identify the part. The teardowns (nRF52833) were right; confirmed later by the `mwdmwd/sc26re` firmware, which targets nRF52833.
 
 Each of these mistakes is a concrete lesson. Worth re-reading before starting a similar project.

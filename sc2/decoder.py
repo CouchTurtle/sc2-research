@@ -5,8 +5,8 @@ Wire format is specified by SDL3 `controller_structs.h` (`TritonMTUFull_t` /
 `TritonMTUNoQuat_t`). This module parses the multiplexed report stream from
 `/dev/hidraw9` — Report 0x42 carries the main controller state at the
 firmware-internal ~266 Hz (`frame_rate` attribute); the puck also emits
-sub-reports 0x43 (~0.4 Hz) and 0x7b (~2 Hz). See `docs/HID_REPORT_FORMAT.md`
-for the full layout and observed behaviour.
+0x43 (battery status, ~0.4 Hz) and 0x7b (puck wireless/link status, ~2 Hz).
+See `docs/HID_REPORT_FORMAT.md` for the full layout and observed behaviour.
 
 Entry points:
   decode_state(report)      parse one 54-byte Report 0x42 into a ControllerFrame
@@ -28,12 +28,12 @@ from typing import Iterator, Optional
 INPUT_REPORT_SIZES: dict[int, int] = {
     0x40: 6,    # Lizard-mode mouse (only when Steam not running)
     0x41: 9,    # Lizard-mode keyboard
-    0x42: 54,   # Controller state — primary report
-    0x43: 15,   # Sub-status (purpose TBD — battery? events?)
-    0x44: 6,
-    0x45: 46,
-    0x79: 2,
-    0x7b: 13,   # Sub-status (rarely seen; periodic)
+    0x42: 54,   # Controller state (TritonMTUFull, with quaternion) — primary report on wired/puck
+    0x43: 15,   # Battery status (TritonBatteryStatus_t per SDL3; ~0.4 Hz)
+    0x44: 6,    # Audio-buffer feedback (haptic-stream flow control); not observed in idle
+    0x45: 46,   # Controller state, no-quaternion (ID_TRITON_CONTROLLER_STATE_BLE) — BLE/other transport
+    0x79: 2,    # Wireless status: 1-byte connect state, edge-triggered; not observed in idle
+    0x7b: 13,   # Puck wireless/link status (~2 Hz; byte 8 = RSSI dBm)
 }
 
 STATE_REPORT_ID = 0x42

@@ -48,9 +48,9 @@ report descriptor (372 bytes) defines the following:
 | `0x44`    | Input     | 6 B             | In descriptor; never observed; not in SDL3 enum |
 | `0x45`    | Input     | 46 B            | `ID_TRITON_CONTROLLER_STATE_BLE` per SDL3 — state report routed via Bluetooth LE; never seen in our Puck-only captures |
 | `0x46`    | Input     | 2 B             | `ID_TRITON_WIRELESS_STATUS_X` per SDL3 (variant); never observed |
-| `0x79`    | Input     | 2 B             | `ID_TRITON_WIRELESS_STATUS` per SDL3 (`TritonWirelessStatus_t`, 1-byte state); never observed in steady state |
+| `0x79`    | Input     | 2 B             | `ID_TRITON_WIRELESS_STATUS` per SDL3 — 1-byte connection state (`0x02`=connected / `0x01`=disconnected), **edge-triggered** (per [openpuck](https://github.com/safijari/openpuck)); not seen in steady state because it only fires on connect/disconnect |
 | `0x7b`    | Input     | 13 B            | **Not in SDL3's enum** — observed at ~2 Hz, likely a Proteus-side puck status report (link quality / paired-slot status); contents are our genuine novel-find. See section below. |
-| `0x80..0x85` | Output | 4–10 B          | Haptic output reports (Rumble / Pulse / Command / LFO_Tone / Log_Sweep / Script) per SDL3 `ValveTritonOutReportMessageIDs` |
+| `0x80..0x89` | Output | 3–63 B          | Haptic + audio-stream output. `0x80`–`0x85` (Rumble / Pulse / Command / LFO_Tone / Log_Sweep / Script) are in SDL3's `ValveTritonOutReportMessageIDs`; `0x86`–`0x89` (audio-stream configure + push data — **not in SDL3**) drive PCM/u-law playback through the actuators. Full layouts in [`HAPTICS.md`](HAPTICS.md). |
 | Feature   | Bi-dir    | 64 B            | `FeatureReportMsg` — get/set settings, attributes, audio, etc. (full enum in [`SDL3_REFERENCE.md`](SDL3_REFERENCE.md)) |
 
 When Steam is running, the stream consists almost entirely of `0x42` reports
@@ -143,7 +143,7 @@ Tentative byte interpretation based on 30+ samples across multiple captures:
 | `0x05` | `00`                      | constant                                |
 | `0x06` | `03..05`                  | small counter                           |
 | `0x07` | `00`                      | constant                                |
-| `0x08` | `ba..c8`                  | **varies per session** — battery/voltage candidate (idle 0xc2, after activity 0xba-0xc8) |
+| `0x08` | `ba..c8`                  | **signal strength (RSSI), signed dBm** — e.g. `0xc2` = −62 dBm. Per [openpuck](https://github.com/safijari/openpuck), byte 8 of `0x7b` is the controller→puck RSSI. (An earlier draft guessed "battery/voltage" here — battery is `0x43`.) |
 | `0x09` | `00`                      | constant                                |
 | `0x0a` | `3c, 4c, 4e`              | **varies per session** — RSSI / link quality candidate |
 | `0x0b` | `ff`                      | constant `0xff`                         |

@@ -292,7 +292,7 @@ Still genuinely first-publicly-documented in this project (cross-checked against
 - Firmware file header layout (32 bytes: magic + size + checksum + 20 reserved)
 - Firmware magics `0xD2D86467` (Triton) and `0x2E795631` (Proteus)
 - The `EDeviceType` enum with 7 entries (Triton_BL/USB/BLE/ESB, Proteus_BL/USB, Nereid_USB) — semantic mapping from `hardwareupdater.py`
-- Live-feature-report routing (`fr_id=2, op=0x83` for puck, `fr_id=1, op=0x81` for controller via ESB) — these are wrappers around the public `ID_GET_ATTRIBUTES_VALUES` opcode but the multi-device routing pattern wasn't documented
+- Live-feature-report routing (`fr_id=2, op=0x83` for puck, `fr_id=1, op=0x83` for controller via ESB — `fr_id` selects the target) — a wrapper around the public `ID_GET_ATTRIBUTES_VALUES` opcode, but the multi-device routing pattern wasn't documented
 - 31-tag Triton-specific attribute taxonomy (the shared `ControllerAttributes` enum only has ~13 entries — our additional tags are Triton-only)
 - Firmware-string analysis: MP2733 charger, fuel-gauge IC, RGBW LEDs, Zephyr RTOS markers, ARM GCC 14 toolchain
 - ESB `esb-controller@0..3` slot strings as proof of the 4-slot architecture

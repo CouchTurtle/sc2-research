@@ -2,6 +2,8 @@
 
 Notes and tools for the Steam Controller 2 (Triton): HID input layout, firmware update protocol, feature-report routing, and static analysis of the firmware blobs.
 
+> **Status:** a host-side reference and learning artifact, lightly maintained. For actively-developed SC2 work — open custom firmware, a DIY replacement puck, Linux drivers — see the **Related SC2 projects** list under [Background](#background). Corrections here are still welcome via issues / PRs.
+
 Most of this comes from extracting `hardwareupdater.x86_64` — the PyInstaller bundle that ships with the Steam client — and verifying against an actual SC2 + Puck on a Steam Deck (SteamOS) with controller firmware `bcdDevice 0.02`. Hobby project with heavy AI assistance — see [Disclaimer](#disclaimer).
 
 Covers: SC2 (USB `28DE:1302/1303`), the Proteus puck (`28DE:1304`), and the parallel Nereid dongle (`28DE:1305`). Nereid is plausibly the Steam-Machine-integrated dongle, based on SDL3 commit timing and the absence of a Nereid bootloader path in Steam's user-facing updater.
@@ -12,9 +14,10 @@ Covers: SC2 (USB `28DE:1302/1303`), the Proteus puck (`28DE:1304`), and the para
 |---|---|
 | [`docs/FIRMWARE_PROTOCOL.md`](docs/FIRMWARE_PROTOCOL.md) | Update protocol: HDLC framing, message IDs, firmware-file format, bootloader-mode switching, live feature-report attribute queries, ARM Cortex-M static analysis. |
 | [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) | RE notes: PyInstaller-bundle extraction, bytecode disassembly without a decompiler, the InHand-flag debunking, capture-timing pitfalls, SteamOS ACL quirks, multi-device `fr_id` routing. |
-| [`docs/CONTROLLER_CAPABILITIES.md`](docs/CONTROLLER_CAPABILITIES.md) | Hardware notes — chip identification, USB topology, haptic actuator IDs, components found via firmware-string analysis. |
+| [`docs/CONTROLLER_CAPABILITIES.md`](docs/CONTROLLER_CAPABILITIES.md) | Hardware notes — chip identification, USB topology, haptic actuator sides, components found via firmware-string analysis. |
 | [`docs/HID_REPORT_FORMAT.md`](docs/HID_REPORT_FORMAT.md) | The 54-byte Report-0x42 layout (from SDL3, verified against ~9k frames), puck USB topology, Lizard-mode timing, sub-reports `0x43` (battery) and `0x7b` (the one Triton input report ID not in SDL3), SteamOS access notes. |
 | [`docs/SDL3_REFERENCE.md`](docs/SDL3_REFERENCE.md) | Cross-reference of what SDL3's open-source code says about Triton — report IDs, output haptic message types, settings, audio cues, charge states, IMU axis swizzle and scaling, trackpad transforms, timing constants. |
+| [`docs/HAPTICS.md`](docs/HAPTICS.md) | Cross-reference of the haptic + audio output reports (`0x80`–`0x89`), reverse-engineered by iczero — actuator sides, script IDs, audio-stream formats, the `0x44` feedback channel. |
 
 ## Tools
 
@@ -63,16 +66,23 @@ Valve's own open releases this work builds on:
 - [SDL3 `controller_constants.h`](https://github.com/libsdl-org/SDL/blob/main/src/joystick/hidapi/steam/controller_constants.h)
 - `hardwareupdater.x86_64` in `~/.local/share/Steam/bin/hardwareupdater/` — the PyInstaller bundle that ships with the Steam client.
 
-Other SC2-era work:
+Related SC2 projects (several are further along than this repo, and are cross-checked throughout the docs):
 
-- [`OpenSteamController/Ibex-Firmware`](https://github.com/OpenSteamController/Ibex-Firmware) — mirrors `.fw` blobs from Valve's CDN with a versioned catalog. Documents the 32-byte header (checksum field = CRC32 at offset `0x08`).
-- [SteamHapticsSinger](https://github.com/CrazyCritic89/SteamHapticsSinger) — haptic output side. Their "Note-On `0x83`" is `HAPTIC_LFO_TONE` per SDL3; "Note-Off `0x81`" is `HAPTIC_PULSE`.
+- [`mwdmwd/sc26re`](https://github.com/mwdmwd/sc26re) — **open custom firmware** (Zephyr) for the controller, flashed over SWD and already playable. The authoritative source for how the hardware works; independently confirms the nRF52833 SoC, the 0x42 layout, the firmware-file header, the feature opcodes and the I2C map used here.
+- [`iczero/steam-controller-stuff`](https://github.com/iczero/steam-controller-stuff) — Wireshark dissector + audio player; the reference for the **haptic/audio output** protocol ([`docs/HAPTICS.md`](docs/HAPTICS.md)).
+- [`safijari/openpuck`](https://github.com/safijari/openpuck) — firmware for an ~$8 nRF52840 Pro Micro that **replaces the puck** and emulates Xbox/Switch/PS pads; its `docs/PROTOCOL.md` covers the host↔puck and 2.4 GHz RF layers.
+- [`OpenSteamController/Ibex-Firmware`](https://github.com/OpenSteamController/Ibex-Firmware) — versioned archive of every `.fw` blob Valve ships (source of the reproducible firmware links below). Documents the 32-byte header (CRC32 at `0x08`).
+- Use-without-Steam drivers: [`Rune580/sc-evdev`](https://github.com/Rune580/sc-evdev) (Linux evdev), [`njanke96/steam-controller-dsu`](https://github.com/njanke96/steam-controller-dsu) (motion/DSU), among others.
+
+Adjacent / historical:
+
+- [SteamHapticsSinger](https://github.com/CrazyCritic89/SteamHapticsSinger) — haptic MIDI player. "Note-On `0x83`" = `HAPTIC_LFO_TONE`, "Note-Off `0x81`" = `HAPTIC_PULSE`.
 - [SteamlessController](https://github.com/ddeverill/SteamlessController) — Windows tool that disables Lizard mode and bridges Report 0x42 to a virtual Xbox 360 pad.
 - [OpenSteamController](https://github.com/greggersaurus/OpenSteamController) (greggersaurus) — RE for the 2015 Steam Controller (LPC11U37F + nRF51822); architecturally unrelated to the SC2.
 
 Hardware identification:
 
-- [iFixit Steam Controller (2nd Generation)](https://www.ifixit.com/Device/Steam_Controller_%282nd_Generation%29) — chip markings read as nRF52833 ("appears to be"). Firmware-DT-address analysis in this repo identifies it as nRF52840.
+- [iFixit Steam Controller (2nd Generation)](https://www.ifixit.com/Device/Steam_Controller_%282nd_Generation%29) — chip markings read as nRF52833. Confirmed: the SoC is the **nRF52833** (an earlier version of this repo wrongly "corrected" this to nRF52840 — see `docs/FIRMWARE_PROTOCOL.md` §Hardware inference for the retraction).
 - [PC Gamer 2026 teardown](https://www.pcgamer.com/hardware/game-pads/steam-controller-2026-review/), [GamersNexus review](https://gamersnexus.net/handheld-pcs-peripherals/valve-steam-controller-review-latency-benchmarks-battery-life), [PCGamingWiki](https://www.pcgamingwiki.com/wiki/Controller:Steam_Controller_(2nd_generation)).
 
 Codenames that were already public before this work:
