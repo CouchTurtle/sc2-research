@@ -5,7 +5,7 @@
 
 ## Summary
 
-- Steam ships `hardwareupdater.x86_64` with the client — a PyInstaller bundle containing the Triton/Proteus update logic in Python.
+- Steam ships `hardwareupdater.x86_64` with the client, a PyInstaller bundle containing the Triton/Proteus update logic in Python.
 - Update workflow: PREP → UPDATE → REBOOT. HID Feature-Report `0x90` switches the device to bootloader (new USB PID), then CDC ACM serial carries HDLC-framed firmware chunks, and a final `MESSAGE_RESET` returns to normal mode.
 - Wire framing: `SOF=0xAD`, `EOF=0xAE`, `ESCAPE=0xAC` (escape table `0xAC|0xAD|0xAE → 0xAC 0x00|0x01|0x02`).
 - Firmware files: 32-byte header (`magic`, `payload_size`, CRC32 at offset `0x08`, 20 bytes reserved) followed by the ARM Cortex-M payload. Magic `0xD2D86467` for Triton, `0x2E795631` for Proteus.
@@ -53,27 +53,27 @@ Workflow: **PREP → UPDATE → REBOOT**.
 
 | Codename | Meaning | First public mention |
 |---|---|---|
-| **Triton** | The controller (SC2 itself) — also called IBEX in firmware filenames | Datamined Q4 2025 ([NeoGAF](https://www.neogaf.com/threads/new-triton-steam-controller-icon-datamined.1689607/), [FRVR](https://frvr.com/blog/steam-controller-2-may-be-coming-soon-as-dataminers-discover-new-triton-codename-in-steam-update/)); also visible in SDL3 source as `SDL_hidapi_steam_triton.c` (covered by [Phoronix Nov 12 2025](https://www.phoronix.com/news/New-Steam-Controller-SDL)) |
+| **Triton** | The controller (SC2 itself), also called IBEX in firmware filenames | Datamined Q4 2025 ([NeoGAF](https://www.neogaf.com/threads/new-triton-steam-controller-icon-datamined.1689607/), [FRVR](https://frvr.com/blog/steam-controller-2-may-be-coming-soon-as-dataminers-discover-new-triton-codename-in-steam-update/)); also visible in SDL3 source as `SDL_hidapi_steam_triton.c` (covered by [Phoronix Nov 12 2025](https://www.phoronix.com/news/New-Steam-Controller-SDL)) |
 | **Ibex** | Hardware-side codename for the SC2 (sibling to `Roy` for the Steam Frame controllers) | Datamined Nov 2024 by [Brad Lynch on X](https://x.com/SadlyItsBradley/status/1858925211363553316); also [Tom's Hardware](https://www.tomshardware.com/video-games/pc-gaming/valve-seemingly-preps-steam-controller-2-and-vr-controller-ibex-and-roy-controller-renders-spotted-in-steamvr-data-mine) |
 | **Proteus** | The puck/dongle | SDL3 source (`IsProteusDongle()` function in `SDL_hidapi_steam_triton.c`); also explicitly named by [Phoronix Nov 12 2025](https://www.phoronix.com/news/New-Steam-Controller-SDL). This document adds the device-type role (`Proteus_USB = 5`, `Proteus_BL = 1`) from `hardwareupdater.py` |
-| **Nereid** | **A second SC2 dongle parallel to Proteus.** SDL3 `controller_list.h` labels USB `28DE:1305` as "Valve Steam Nereid Dongle (Proprietary)" with the same `k_eControllerType_SteamControllerTriton` driver assignment as Proteus; the driver's `IsProteusDongle()` returns true for both — i.e., they share the exact same wire protocol. `hardwareupdater.py` defines `Nereid_USB = 6` in `EDeviceType` but **no `Nereid_BL`**, suggesting Steam's standalone updater doesn't yet have a bootloader path for it.<br><br>**Strongest current hypothesis** (not confirmed): Nereid is the **Steam-Machine-integrated dongle**. Evidence: (a) SDL3 added the Nereid PID on Nov 12 2025, the same week Steam Machine was announced; (b) Steam Machine is officially "a PC console under SteamOS" and will ship as a self-contained bundle — an integrated dongle (USB-internal, not a separate puck the user plugs in) would explain a parallel PID; (c) no Nereid_BL in the user-facing updater is consistent with the Steam Machine's OS handling its own integrated peripherals directly rather than via Steam-Client; (d) reusing the Proteus protocol means controllers and games work identically across Machine + standalone Puck setups. Steam Machine has been delayed (no release date as of May 2026 due to RAM shortage), which fits "PID defined ahead of launch, no public hardware yet." Alternatives: hardware-revision 2 of the Puck, region-specific SKU, OEM-licensed dongle. None as strong a fit as Steam-Machine-integrated. | SDL3 commit `1998b650452bdf0bee5209e20e4715b4295abe8c` (Sam Lantinga, Nov 12 2025); also mentioned by [Phoronix](https://www.phoronix.com/news/New-Steam-Controller-SDL) the same day |
-| **Olympus** | Custom/relabeled trackpad IC at I2C `0x2C` (drivers `olympus-trackpad-left`, `olympus-trackpad-right`) | **First publicly documented here** — extracted from IBEX_FW rodata Device-Tree nodes |
-| **Dragoon** | Valve-internal HAL/scheduling library — path `dragoon/libs/scheduling/src/rem_hal_event_timer.c` leaked in IBEX_FW build paths | **First publicly documented here** |
-| **Roy** | Found in IBEX_FW as a thread/module name `roybex_combiner`. "Roy" is the public datamined codename for the Steam Frame VR controllers (per Tom's Hardware Q4 2025). A "Roy-Ibex combiner" thread in Triton firmware **suggests an input-bridge between Roy controllers and the SC2** — hypothesis, not confirmed | "Roy" itself is publicly datamined (Tom's Hardware Q4 2025); the integration evidence in Triton firmware is **first publicly documented here** |
-| **ESB** | "Enhanced ShockBurst" — Nordic Semi proprietary 2.4 GHz wireless protocol between puck and controller | Nordic-standard, not Valve-specific |
+| **Nereid** | **A second SC2 dongle parallel to Proteus.** SDL3 `controller_list.h` labels USB `28DE:1305` as "Valve Steam Nereid Dongle (Proprietary)" with the same `k_eControllerType_SteamControllerTriton` driver assignment as Proteus; the driver's `IsProteusDongle()` returns true for both, i.e., they share the exact same wire protocol. `hardwareupdater.py` defines `Nereid_USB = 6` in `EDeviceType` but **no `Nereid_BL`**, suggesting Steam's standalone updater doesn't yet have a bootloader path for it.<br><br>**Strongest current hypothesis** (not confirmed): Nereid is the **Steam-Machine-integrated dongle**. Evidence: (a) SDL3 added the Nereid PID on Nov 12 2025, the same week Steam Machine was announced; (b) Steam Machine is officially "a PC console under SteamOS" and will ship as a self-contained bundle: an integrated dongle (USB-internal, not a separate puck the user plugs in) would explain a parallel PID; (c) no Nereid_BL in the user-facing updater is consistent with the Steam Machine's OS handling its own integrated peripherals directly rather than via Steam-Client; (d) reusing the Proteus protocol means controllers and games work identically across Machine + standalone Puck setups. Steam Machine has been delayed (no release date as of May 2026 due to RAM shortage), which fits "PID defined ahead of launch, no public hardware yet." Alternatives: hardware-revision 2 of the Puck, region-specific SKU, OEM-licensed dongle. None as strong a fit as Steam-Machine-integrated. | SDL3 commit `1998b650452bdf0bee5209e20e4715b4295abe8c` (Sam Lantinga, Nov 12 2025); also mentioned by [Phoronix](https://www.phoronix.com/news/New-Steam-Controller-SDL) the same day |
+| **Olympus** | Custom/relabeled trackpad IC at I2C `0x2C` (drivers `olympus-trackpad-left`, `olympus-trackpad-right`) | **First publicly documented here**: extracted from IBEX_FW rodata Device-Tree nodes |
+| **Dragoon** | Valve-internal HAL/scheduling library (path `dragoon/libs/scheduling/src/rem_hal_event_timer.c` leaked in IBEX_FW build paths) | **First publicly documented here** |
+| **Roy** | Found in IBEX_FW as a thread/module name `roybex_combiner`. "Roy" is the public datamined codename for the Steam Frame VR controllers (per Tom's Hardware Q4 2025). A "Roy-Ibex combiner" thread in Triton firmware **suggests an input-bridge between Roy controllers and the SC2** (hypothesis, not confirmed) | "Roy" itself is publicly datamined (Tom's Hardware Q4 2025); the integration evidence in Triton firmware is **first publicly documented here** |
+| **ESB** | "Enhanced ShockBurst", Nordic Semi proprietary 2.4 GHz wireless protocol between puck and controller | Nordic-standard, not Valve-specific |
 
-`Deckard` (Steam Frame headset) is a separate product from the sibling SteamVR datamine — not directly relevant to Triton/SC2. Naming-pattern note: the codenames aren't uniformly themed. Triton / Proteus / Nereid are Greek sea-deities; Olympus is a Greek mountain; Ibex is wildlife; Dragoon is military; Roy is a Blade-Runner reference (matching `Deckard`). Different teams or different eras of naming.
+`Deckard` (Steam Frame headset) is a separate product from the sibling SteamVR datamine, not directly relevant to Triton/SC2. Naming-pattern note: the codenames aren't uniformly themed. Triton / Proteus / Nereid are Greek sea-deities; Olympus is a Greek mountain; Ibex is wildlife; Dragoon is military; Roy is a Blade-Runner reference (matching `Deckard`). Different teams or different eras of naming.
 
 ## USB IDs (fully decoded)
 
 | VID:PID | Device | Mode |
 |---|---|---|
-| `28DE:1302` | Triton (Controller) | Wired-USB, Normal Mode (HID) — labelled `Valve Steam Triton Controller` in SDL3 `controller_list.h` |
-| `28DE:1303` | Triton (Controller) | **Bluetooth LE mode** — labelled `Valve Steam Triton Controller (BLE)` in SDL3 `controller_list.h`; appears in `hardwareupdater.py` `find_units_for_update` (BLE-paired controllers can be enumerated for updates) but not in `find_attached_device_by_serial_number` (BLE devices can't be opened via the same hidapi path as USB/Puck) |
-| `28DE:1304` | Proteus (Puck) | Normal Mode (HID) — `Valve Steam Proteus Dongle (Proprietary)` |
-| `28DE:1305` | **Nereid (separate Dongle)** | Normal Mode (HID) — `Valve Steam Nereid Dongle (Proprietary)` in SDL3 `controller_list.h`. SDL3's `IsProteusDongle()` returns true for both `0x1304` and `0x1305`, so this is a structurally parallel second SC2 dongle (role uncertain — possibly a future / SKU variant; see Codenames table) |
-| `28DE:1005` | Triton (Controller) | Bootloader Mode (CDC ACM) — **first publicly documented here** |
-| `28DE:1007` | Proteus (Puck) | Bootloader Mode (CDC ACM) — **first publicly documented here** |
+| `28DE:1302` | Triton (Controller) | Wired-USB, Normal Mode (HID), labelled `Valve Steam Triton Controller` in SDL3 `controller_list.h` |
+| `28DE:1303` | Triton (Controller) | **Bluetooth LE mode**, labelled `Valve Steam Triton Controller (BLE)` in SDL3 `controller_list.h`; appears in `hardwareupdater.py` `find_units_for_update` (BLE-paired controllers can be enumerated for updates) but not in `find_attached_device_by_serial_number` (BLE devices can't be opened via the same hidapi path as USB/Puck) |
+| `28DE:1304` | Proteus (Puck) | Normal Mode (HID): `Valve Steam Proteus Dongle (Proprietary)` |
+| `28DE:1305` | **Nereid (separate Dongle)** | Normal Mode (HID): `Valve Steam Nereid Dongle (Proprietary)` in SDL3 `controller_list.h`. SDL3's `IsProteusDongle()` returns true for both `0x1304` and `0x1305`, so this is a structurally parallel second SC2 dongle (role uncertain, possibly a future / SKU variant; see Codenames table) |
+| `28DE:1005` | Triton (Controller) | Bootloader Mode (CDC ACM), **first publicly documented here** |
+| `28DE:1007` | Proteus (Puck) | Bootloader Mode (CDC ACM), **first publicly documented here** |
 
 Steam-side scan: VID=0x28DE, Usage-Page=0xFF00 (vendor-specific HID).
 
@@ -236,7 +236,7 @@ Before the frame protocol on serial can start, the device must be put in bootloa
 Our puck has `bcdDevice 0.02` → we land on the **bcd_version == 2** path (Feature-Report 0x02).
 
 Normal reboot (Triton only, from `reboot()`):
-- `pad_hid_fr(b'\x01\x95')` — Feature-Report-ID 0x01, Setting `0x95` = Normal Reboot
+- `pad_hid_fr(b'\x01\x95')`: Feature-Report-ID 0x01, Setting `0x95` = Normal Reboot
 - Proteus has no normal-reboot command exposed (`reboot()` returns False unless Triton).
 
 ## Updater Function Map
@@ -367,10 +367,10 @@ Via `ioctl HIDIOCSFEATURE` + `HIDIOCGFEATURE` on hidraw9 (Puck PID 0x1304):
 | Channel | fr_id | op | Routing |
 |---|---|---|---|
 | **Puck attributes (local)** | 2 | 0x83 | direct to puck firmware |
-| **Controller attributes (ESB-routed)** | 1 | 0x83 | via ESB radio to the paired controller — same opcode as the puck; `fr_id` selects the target |
+| **Controller attributes (ESB-routed)** | 1 | 0x83 | via ESB radio to the paired controller (same opcode as the puck; `fr_id` selects the target) |
 | Status query (unclear) | 1 | 0x8d | returns `type=0x89, len=3, 00 00 00` |
 
-Query wire format: `pad_hid_fr(bytes([fr_id, op]))` (64-byte padded). (An earlier draft listed the controller channel as `op=0x81`; that was wrong — `op=0x83` = GET_ATTRIBUTES_VALUES is used for both targets, as in `tools/attr_query.py`.)
+Query wire format: `pad_hid_fr(bytes([fr_id, op]))` (64-byte padded). (An earlier draft listed the controller channel as `op=0x81`; that was wrong: `op=0x83` = GET_ATTRIBUTES_VALUES is used for both targets, as in `tools/attr_query.py`.)
 
 ### Host → controller relay (feature report `0x01`)
 
@@ -434,15 +434,15 @@ Generic pattern for attribute reads via Feature-Report:
 | 16 | `trackpad_id` | uint32, trackpad variant |
 | 17 | `secondary_trackpad_id` | uint32, second trackpad |
 
-(Tags 3, 6, 7, 8 not in dispatch — reserved.)
+(Tags 3, 6, 7, 8 not in dispatch: reserved.)
 
 ## Feature-report opcodes vs settings
 
 Two different things share the Feature-Report channel and were conflated in earlier drafts of this doc:
 
-**(a) Message opcodes** — the *second* byte of a feature report (`[report_id][opcode][len][payload…]`). `0x90` (REBOOT_TO_BOOTLOADER / ISP) and `0x95` (FIRMWARE_UPDATE_REBOOT) are **opcodes, not settings**. The updater sends them as `pad_hid_fr(b'\x01\x90')` = report-id `0x01`, opcode `0x90`. Full opcode list in the **Operation IDs** section below.
+**(a) Message opcodes**: the *second* byte of a feature report (`[report_id][opcode][len][payload…]`). `0x90` (REBOOT_TO_BOOTLOADER / ISP) and `0x95` (FIRMWARE_UPDATE_REBOOT) are **opcodes, not settings**. The updater sends them as `pad_hid_fr(b'\x01\x90')` = report-id `0x01`, opcode `0x90`. Full opcode list in the **Operation IDs** section below.
 
-**(b) Settings registry** — key/value settings addressed by a numeric ID, read/written via opcodes `SET_SETTINGS_VALUES` (`0x87`) / `GET_SETTINGS_VALUES` (`0x89`) as 3-byte `[id][value_le16]` entries. The [`mwdmwd/sc26re`](https://github.com/mwdmwd/sc26re/blob/main/app/src/ibex_settings_registry.c) firmware enumerates **83 settings (ID 0–82)**; most match SDL's `SETTING_*` names, a handful are OFW-specific. Highlights:
+**(b) Settings registry**: key/value settings addressed by a numeric ID, read/written via opcodes `SET_SETTINGS_VALUES` (`0x87`) / `GET_SETTINGS_VALUES` (`0x89`) as 3-byte `[id][value_le16]` entries. The [`mwdmwd/sc26re`](https://github.com/mwdmwd/sc26re/blob/main/app/src/ibex_settings_registry.c) firmware enumerates **83 settings (ID 0–82)**; most match SDL's `SETTING_*` names, a handful are OFW-specific. Highlights:
 
 | ID | Name | Default | Range |
 |---|---|---|---|
@@ -482,7 +482,7 @@ The same firmware blobs are distributed via Valve's CDN inside the `bins_hardwar
 | `PROTEUS_FW_69FA587F.fw` | 2026-05-06 | 200 KB | <https://opensteamcontroller.github.io/Ibex-Firmware/Puck/PROTEUS_FW_69FA587F.fw> |
 | `PROTEUS_FW_69FBD45D.fw` | 2026-05-07 | 199 KB | <https://opensteamcontroller.github.io/Ibex-Firmware/Puck/PROTEUS_FW_69FBD45D.fw> |
 
-The filename hex is a Unix timestamp — `0x69FA5889 = 1778221705 = 2026-05-06 13:48 UTC`, etc.
+The filename hex is a Unix timestamp: `0x69FA5889 = 1778221705 = 2026-05-06 13:48 UTC`, etc.
 
 As of June 2026 the Ibex-Firmware archive has 21 IBEX versions (back to `691BB5B3`, Nov 2025) and 19 PROTEUS versions, so byte-diffing across pairs to track changes between updates is trivial.
 
@@ -542,8 +542,8 @@ Options:
 ## Logging
 
 Steam logs all operations under `HardwareUpdate:` in `~/.local/share/Steam/logs/steamui_system.txt` and `controller.txt`. Example symbols (Steam-internal C++ class names, name-mangled):
-- `CGetTritonDonglePairingBondWorkItem(slot)` — pairing-bond query per slot 0..3
-- `CGetTritonSlotInfoWorkItem(slot)` — slot info query
+- `CGetTritonDonglePairingBondWorkItem(slot)`: pairing-bond query per slot 0..3
+- `CGetTritonSlotInfoWorkItem(slot)`: slot info query
 
 ## Firmware Internals (ARM Cortex-M static analysis)
 
@@ -560,19 +560,19 @@ From vector-table analysis across all 4 .fw files:
 | Registered IRQs | 63 / 63+ | 63+ |
 | ASCII printable in code | ~36% | ~30% |
 
-**Nordic nRF52833 for both Triton and Proteus** — matching the iFixit / PC Gamer teardowns. (An earlier version of this doc claimed nRF52840 and framed it as "correcting the teardowns"; **that was our mistake** — the correction has been reverted. See the methodology note at the end of this section.)
+**Nordic nRF52833 for both Triton and Proteus**, matching the iFixit / PC Gamer teardowns. (An earlier version of this doc claimed nRF52840 and framed it as "correcting the teardowns"; **that was our mistake**: the correction has been reverted. See the methodology note at the end of this section.)
 
 [iFixit and PC Gamer teardowns](https://www.ifixit.com/Device/Steam_Controller_%282nd_Generation%29) read the controller's chip markings as Nordic nRF52833. The firmware is **consistent with that**. The IBEX_FW rodata contains Zephyr Device-Tree node addresses the firmware reads/writes against:
 
 | DT node | Address | nRF register | Significance |
 |---|---|---|---|
-| `gpio@50000300` | `0x50000300` | GPIO Port P1 | Present on **both** nRF52833 and nRF52840 — both have a second GPIO port. Does **not** distinguish them. |
+| `gpio@50000300` | `0x50000300` | GPIO Port P1 | Present on **both** nRF52833 and nRF52840. Both have a second GPIO port. Does **not** distinguish them. |
 | `i2s@40025000` | `0x40025000` | I2S peripheral | Present on **both** nRF52833 and nRF52840 (and nRF52832). Does **not** distinguish them. |
 | `clock@40000000`, `uart@40002000`, `i2c@40003000`/`@40004000`, `adc@40007000`, `timer@40009000`/`@4001a000`, `temp@4000c000`, `random@4000d000`, `watchdog@40010000`, `pwm@4001c000`/`@40021000`/`@40022000`, `flash-controller@4001e000`, `gpio@50000000`, `usbd@40027000` | various | Standard nRF52 family | Match the nRF52 register map; consistent with nRF52833. |
 
-**What would actually distinguish an nRF52840** — QSPI, CryptoCell (CC310), 1 MB flash, 256 KB RAM — does **not** appear in either firmware. The images fit 512 KB flash / 128 KB RAM, and the observed stack-pointers (~96 KB into SRAM) fit the 128 KB part. Driver names confirm the Nordic SDK regardless: `adc_nrfx_saadc`, `i2c_nrfx_twim`, `pwm_nrfx`, `uart_nrfx_uarte`.
+**What would actually distinguish an nRF52840** (QSPI, CryptoCell (CC310), 1 MB flash, 256 KB RAM) does **not** appear in either firmware. The images fit 512 KB flash / 128 KB RAM, and the observed stack-pointers (~96 KB into SRAM) fit the 128 KB part. Driver names confirm the Nordic SDK regardless: `adc_nrfx_saadc`, `i2c_nrfx_twim`, `pwm_nrfx`, `uart_nrfx_uarte`.
 
-**Independent confirmation:** the [`mwdmwd/sc26re`](https://github.com/mwdmwd/sc26re) firmware-reimplementation project builds its Zephyr board for `steam_controller_ibex/nrf52833` (512 KB / 128 KB, J-Link device `nRF52833_xxAA`) and flashes it onto real controllers; it also runs the stock Ibex payload on a BBC micro:bit v2 as a "same SoC" development target — the micro:bit v2 is an nRF52833.
+**Independent confirmation:** the [`mwdmwd/sc26re`](https://github.com/mwdmwd/sc26re) firmware-reimplementation project builds its Zephyr board for `steam_controller_ibex/nrf52833` (512 KB / 128 KB, J-Link device `nRF52833_xxAA`) and flashes it onto real controllers; it also runs the stock Ibex payload on a BBC micro:bit v2 as a "same SoC" development target: the micro:bit v2 is an nRF52833.
 
 Vector-table stats:
 
@@ -583,7 +583,7 @@ Vector-table stats:
 | Flash base | `0x0000_0000` | `0x0000_0000` |
 | Registered IRQs | 63 / 63+ | 63+ |
 
-**Methodology note (kept as a lesson):** peripheral-presence in a firmware Device-Tree only narrows the SoC to a *family*. `gpio1` and `i2s` are shared across most of the nRF52 line, so they cannot separate the nRF52833 from the nRF52840 — only the *absent* high-end peripherals (QSPI, CryptoCell) and the flash/RAM sizes do. The earlier "it must be a 52840" conclusion over-read that evidence and inverted a correct teardown. Lesson: a present peripheral proves a lower bound on the family, not a specific part; the *absence* of the top-end peripherals is the load-bearing signal.
+**Methodology note (kept as a lesson):** peripheral-presence in a firmware Device-Tree only narrows the SoC to a *family*. `gpio1` and `i2s` are shared across most of the nRF52 line, so they cannot separate the nRF52833 from the nRF52840. Only the *absent* high-end peripherals (QSPI, CryptoCell) and the flash/RAM sizes do. The earlier "it must be a 52840" conclusion over-read that evidence and inverted a correct teardown. Lesson: a present peripheral proves a lower bound on the family, not a specific part; the *absence* of the top-end peripherals is the load-bearing signal.
 
 ### Standard Cortex-M vector table
 
@@ -593,9 +593,9 @@ Bytes 0x20..0x21F in the file are the standard ARM vector table:
 - Word 2..15: System exceptions (NMI, HardFault, MemManage, BusFault, UsageFault, SVCall, DebugMonitor, PendSV, SysTick)
 - Word 16+: NVIC IRQ handlers (device-specific, up to 64+ on nRF52)
 
-The unused "Reserved" slots (7, 8, 9, 10, 13) are all 0 — standard compliance.
+The unused "Reserved" slots (7, 8, 9, 10, 13) are all 0 (standard compliance).
 
-Many IRQs share the same handler — typical pattern when the firmware author only actively uses certain peripherals and the rest point to a default handler.
+Many IRQs share the same handler: typical pattern when the firmware author only actively uses certain peripherals and the rest point to a default handler.
 
 ### Build-Identifier at a fixed offset
 
@@ -628,41 +628,41 @@ DT-node analysis of IBEX_FW reveals the complete I2C bus map:
 | I2C addr | DT-node name | Real chip | Function |
 |---|---|---|---|
 | `0x10` | `slg4l48185@10` | **Renesas/Dialog SLG4L48185** | GreenPAK programmable mixed-signal IC. Driver `gpio_greenpak` uses it as an I2C-controlled GPIO expander (likely for power-sequencing or puck-pairing pin debouncing). |
-| `0x2C` | `olympus@2c` | **Olympus** (Valve-internal codename — likely custom or relabeled silicon) | Trackpad controller for both left + right trackpads (drivers `olympus-trackpad-left`, `olympus-trackpad-right`). |
-| `0x4B` | `mp2733@4b` | **MPS MP2733** | USB-PD-capable battery charger + fuel-gauge combo, BC1.2-compliant. Confirms the `"MP2733"` and `"BC1.2 result callback"` strings we found earlier; the `"Fuel gauge device is not ready"` string is from this chip's init code (the MP2733 has a built-in fuel-gauge — no separate IC). |
-| `0x6A` | `lsm6dsv16x@6a` | **ST LSM6DSV16X** | 6-axis IMU (3D gyro + 3D accelerometer) with embedded **Smart Fusion Engine** that outputs quaternions directly. Released by ST in 2024. Exact part number leaked in the error string `"Failed to set LSM6D's moutning matrix"` (sic — typo from Valve's firmware author). This chip is what fills the `sGyroQuatW/X/Y/Z` fields in `TritonMTUFull_t.imu` — the SDL3 comment "the controller can do its own sensor fusion" refers to this on-chip engine, not firmware-side code. |
+| `0x2C` | `olympus@2c` | **Olympus** (Valve-internal codename, likely custom or relabeled silicon) | Trackpad controller for both left + right trackpads (drivers `olympus-trackpad-left`, `olympus-trackpad-right`). |
+| `0x4B` | `mp2733@4b` | **MPS MP2733** | USB-PD-capable battery charger + fuel-gauge combo, BC1.2-compliant. Confirms the `"MP2733"` and `"BC1.2 result callback"` strings we found earlier; the `"Fuel gauge device is not ready"` string is from this chip's init code (the MP2733 has a built-in fuel-gauge: no separate IC). |
+| `0x6A` | `lsm6dsv16x@6a` | **ST LSM6DSV16X** | 6-axis IMU (3D gyro + 3D accelerometer) with embedded **Smart Fusion Engine** that outputs quaternions directly. Released by ST in 2024. Exact part number leaked in the error string `"Failed to set LSM6D's moutning matrix"` (sic: typo from Valve's firmware author). This chip is what fills the `sGyroQuatW/X/Y/Z` fields in `TritonMTUFull_t.imu`. The SDL3 comment "the controller can do its own sensor fusion" refers to this on-chip engine, not firmware-side code. |
 
 ### Other hardware components identified from string analysis
 
 | String found | Component |
 |---|---|
-| `"cal/rgbw_w"`, `"cal/rgbw_b/g/r"` | RGBW LEDs with per-channel calibration (status indicator?). SDL3 doesn't expose LED control, but the firmware has it — see `ID_SET_LED_COLOR` in the Operation IDs section below. |
-| `"grip touch threshold failed to retrieve"` | Grip-touch sensors (the LSM6DSV16X has touch-sense capability — these are the Grip Sense capacitive bits in the buttons mask: `0x10000000` / `0x20000000`) |
+| `"cal/rgbw_w"`, `"cal/rgbw_b/g/r"` | RGBW LEDs with per-channel calibration (status indicator?). SDL3 doesn't expose LED control, but the firmware has it. See `ID_SET_LED_COLOR` in the Operation IDs section below. |
+| `"grip touch threshold failed to retrieve"` | Grip-touch sensors (the LSM6DSV16X has touch-sense capability. These are the Grip Sense capacitive bits in the buttons mask: `0x10000000` / `0x20000000`) |
 | `"PILOT_SENSE input"`, `"puck-pilot-gpio"` | Pilot-line GPIOs for puck-docking detection (signal that the controller is mounted on the magnetic Puck) |
 
 ### Proteus-side hardware (Puck)
 
-PROTEUS_FW has a different, much smaller DT map — confirms what's NOT on the Puck:
-- **No** `lsm6dsv16x` node — no IMU on the Puck
-- **No** `mp2733` node — no battery charger
-- **No** `olympus` node — no trackpads
-- **Has** `ec-button-interface@50` at I2C `0x50` — likely a small Embedded Controller / button-readout IC for the Puck's physical buttons (pairing button)
+PROTEUS_FW has a different, much smaller DT map (confirms what's NOT on the Puck):
+- **No** `lsm6dsv16x` node, no IMU on the Puck
+- **No** `mp2733` node, no battery charger
+- **No** `olympus` node, no trackpads
+- **Has** `ec-button-interface@50` at I2C `0x50`, likely a small Embedded Controller / button-readout IC for the Puck's physical buttons (pairing button)
 - **Has** logical nodes `esb-controller@0..3` (matching SDL3 driver expectation of 4 slots) and `ec-input-tap@0..3` (input-tap slots, one per slot)
-- **Has** `udc_nrfx` (USB Device Controller driver) and `i2c_nrfx_twis` (I2C **slave** mode) — Puck acts as I2C slave on at least one bus, presumably to expose itself to a host MCU when docked
+- **Has** `udc_nrfx` (USB Device Controller driver) and `i2c_nrfx_twis` (I2C **slave** mode). Puck acts as I2C slave on at least one bus, presumably to expose itself to a host MCU when docked
 - Plus the standard nRF52833 peripherals (`gpio@50000300`, `usbd@40027000`, etc.)
 
-### RTOS + SDK + toolchain — exact versions
+### RTOS + SDK + toolchain: exact versions
 
 Boot-banner strings in `IBEX_FW_69FA5889.fw` give pinpoint versioning:
 
-- `"*** Using Zephyr OS v3.7.99-93ba569c5b31 ***"` — **Zephyr v3.7.99** with Git commit `93ba569c5b31` (a pre-release between v3.7 and v3.8)
-- `"*** Using nRF Connect SDK v2.9.0-d93dcad627bd ***"` — **Nordic nRF Connect SDK v2.9.0** with Git commit `d93dcad627bd`
+- `"*** Using Zephyr OS v3.7.99-93ba569c5b31 ***"`: **Zephyr v3.7.99** with Git commit `93ba569c5b31` (a pre-release between v3.7 and v3.8)
+- `"*** Using nRF Connect SDK v2.9.0-d93dcad627bd ***"`: **Nordic nRF Connect SDK v2.9.0** with Git commit `d93dcad627bd`
 - Both Git commits are upstream-verifiable: clone the Zephyr or NCS repo and `git show <hash>`.
 
 Plus from earlier analysis:
 - **Build system**: Zephyr's `west` build tool (`WEST_TOPDIR` referenced in build paths)
 - **Toolchain**: ARM GCC 14 + newlib, built on Jenkins (`/data/jenkins/workspace/GNU-toolchain/arm-14/src/newlib-cygwin/newlib/`)
-- **Internal HAL**: `dragoon/libs/scheduling/src/rem_hal_event_timer.c` — `Dragoon` is a Valve-internal repository feeding into the Triton firmware build. Nothing public; first surfaced here.
+- **Internal HAL**: `dragoon/libs/scheduling/src/rem_hal_event_timer.c`. `Dragoon` is a Valve-internal repository feeding into the Triton firmware build. Nothing public; first surfaced here.
 
 Confirming Zephyr patterns (independent of the boot banner) include `/settings/...` hierarchical paths, `"device not ready"` init errors, and a long list of `nrfx_*` driver names. Both IBEX and PROTEUS firmwares share the same Zephyr/NCS/toolchain combo.
 
@@ -677,10 +677,10 @@ Confirming Zephyr patterns (independent of the boot banner) include `/settings/.
 | `rgbled_test_thread` | RGB-LED test routine |
 | `bg_work`, `usbd_workq` | Zephyr work queues |
 | `ibex_input`, `ibex_loop` | IBEX-specific input handling |
-| `ibexesb_common` | **NEW in newer IBEX build** — common ESB code shared between modes. Suggests recent refactoring to support multiple ESB dongle types (Proteus + Nereid). |
-| `roybex_combiner` | **Hypothesis: input-aggregator thread between Roy (Steam Frame VR controller) and Ibex (SC2).** Only mention of "Roy" found in any Triton firmware. Plausible interpretations: VR-scenario where SC2 inputs are combined with Roy controller inputs; or a future cross-product bridge. **Not confirmed** — would need either disassembly of the function or Steam Frame to launch and behave consistently with this hypothesis. |
+| `ibexesb_common` | **NEW in newer IBEX build**: common ESB code shared between modes. Suggests recent refactoring to support multiple ESB dongle types (Proteus + Nereid). |
+| `roybex_combiner` | **Hypothesis: input-aggregator thread between Roy (Steam Frame VR controller) and Ibex (SC2).** Only mention of "Roy" found in any Triton firmware. Plausible interpretations: VR-scenario where SC2 inputs are combined with Roy controller inputs; or a future cross-product bridge. **Not confirmed**: would need either disassembly of the function or Steam Frame to launch and behave consistently with this hypothesis. |
 | `controller_settings` | Settings persistence |
-| `hid_proxy` (PROTEUS only) | HID-report proxying — see "HID-proxy architecture on the puck" section below |
+| `hid_proxy` (PROTEUS only) | HID-report proxying. See "HID-proxy architecture on the puck" section below |
 
 ### Boot banner
 
@@ -688,7 +688,7 @@ Both firmwares log on start:
 - Triton: `"Starting Triton BUILD_TIME_%08x GIT_SHA_%s"`
 - Proteus: `"Starting Proteus BUILD_TIME_%08x GIT_SHA_%s"`
 
-The `GIT_SHA_%s` matches our hypothesis — the **12-char hex string at offset 0x012C** in the FW header is the Git commit SHA.
+The `GIT_SHA_%s` matches our hypothesis: the **12-char hex string at offset 0x012C** in the FW header is the Git commit SHA.
 
 ### ESB protocol details (from Proteus rodata)
 
@@ -711,7 +711,7 @@ Directly confirmed by `"Starting Triton BUILD_TIME_%08x GIT_SHA_%s"`.
 
 ## State machines (decoded from `ST_*_entry` names)
 
-### Wireless-mode keychord — 4 user-switchable modes
+### Wireless-mode keychord: 4 user-switchable modes
 
 The controller exposes a button-combination ("keychord") for switching wireless modes:
 
@@ -719,12 +719,12 @@ The controller exposes a button-combination ("keychord") for switching wireless 
 |---|---|
 | `ST_PUCK_KEYCHORD_BT_entry` | Bluetooth LE |
 | `ST_PUCK_KEYCHORD_ESB_entry` | Standard Proteus puck (ESB) |
-| `ST_PUCK_KEYCHORD_ESB_ALT_entry` | **Alternative ESB** — hypothesis: the Nereid pairing path |
+| `ST_PUCK_KEYCHORD_ESB_ALT_entry` | **Alternative ESB**. Hypothesis: the Nereid pairing path |
 | `ST_PUCK_KEYCHORD_CURRENT_entry` | Re-use last-selected mode |
 
 Same set exists with `ST_BATTERY_*_entry` prefix (parallel states while on battery, i.e. wireless).
 
-The `ESB_ALT` state is **independent evidence** that Triton firmware was designed from the start to support two distinct ESB dongles — consistent with SDL3's `IsProteusDongle()` returning true for both Proteus (`0x1304`) and Nereid (`0x1305`) PIDs.
+The `ESB_ALT` state is **independent evidence** that Triton firmware was designed from the start to support two distinct ESB dongles, consistent with SDL3's `IsProteusDongle()` returning true for both Proteus (`0x1304`) and Nereid (`0x1305`) PIDs.
 
 ### Power / USB state machine
 
@@ -779,7 +779,7 @@ Notes on the more interesting ones:
 | **`ID_GET_LED_COLOR` / `ID_SET_LED_COLOR`** | **Firmware-level LED control.** Discovered here via the IBEX_FW `ID_*` format strings; Valve subsequently exposed LED dimming in the Steam Settings UI as part of the June 2026 firmware-update release (per [GamingOnLinux coverage](https://www.gamingonlinux.com/2026/06/latest-steam-update-brings-steam-controller-firmware-updates-and-bug-fixes/)), confirming the path. SDL3 itself still returns `SDL_Unsupported()` for `SetJoystickLED`. |
 | `ID_GET_USER_STORE` | Per-user persistent data storage |
 | `ID_FIRMWARE_UPDATE_REBOOT` | Reboot to enter firmware update (the `Setting 0x90` path) |
-| **`ID_REBOOT_INTO_ISP`** | **Alternative bootloader-switch path** — In-System Programming reboot. A second route into the bootloader, distinct from the `Setting 0x90` Feature-Report we documented in the "Update Wire Protocol" section. |
+| **`ID_REBOOT_INTO_ISP`** | **Alternative bootloader-switch path**: In-System Programming reboot. A second route into the bootloader, distinct from the `Setting 0x90` Feature-Report we documented in the "Update Wire Protocol" section. |
 | `ID_TURN_OFF` | Power-down |
 
 ## Settings subsystem (Zephyr `settings/` paths)
@@ -798,18 +798,18 @@ settings/sensors/imu/mounting_matrix
 `settings/sensors/imu/mounting_matrix` is the 3×3 rotation matrix telling the firmware how the LSM6DSV16X is physically oriented inside the chassis (likely stored as 9 int16 or float values).
 
 Five sub-tree namespaces appear in `"Failed to delete X settings"` errors:
-- `bt settings` — Bluetooth bond + identity storage
+- `bt settings`: Bluetooth bond + identity storage
 - `debug settings`
-- `esb settings` — ESB pairing
-- `mte settings` — unknown acronym (NOT ARM Memory Tagging Extension — nRF52 is ARMv7-M with no MTE support). Possibly a Valve-internal abbreviation
+- `esb settings`: ESB pairing
+- `mte settings`: unknown acronym (NOT ARM Memory Tagging Extension, nRF52 is ARMv7-M with no MTE support). Possibly a Valve-internal abbreviation
 - `user settings`
 
 ## HID-proxy architecture (PROTEUS)
 
 The Puck transparently proxies HID reports from each connected Triton. Strings in PROTEUS_FW:
-- `HID_PROXY_0`, `HID_PROXY_1`, `HID_PROXY_2`, `HID_PROXY_3` — one proxy endpoint per ESB slot
+- `HID_PROXY_0`, `HID_PROXY_1`, `HID_PROXY_2`, `HID_PROXY_3`: one proxy endpoint per ESB slot
 - `hid_proxy` module + `hid-puck` DT-node-like name
-- `"Failed to register a HID proxy tap %d"` — proxy "tap" registration error per slot
+- `"Failed to register a HID proxy tap %d"`: proxy "tap" registration error per slot
 
 This **confirms** our empirical observation of `/dev/hidraw9..12` mapping to the 4 ESB slots, plus `hidraw13` being the puck's own status / control endpoint (the `hid-puck` DT-node).
 
@@ -828,39 +828,41 @@ Each of the 4 ESB slots tracks its own state with per-slot log strings:
 | Host suspended | `Slot %u : Host suspended - waiting for wakeup` / `Host did not wakeup within timeout` / `Host suspended, turn off controller` |
 | Host awake | `Slot %u : Host awake` |
 | Protocol negotiation | `Slot %u : Sending protocol version: %u %u` / `Protocol version updated %u` / `Unrecognized protocol version %u` |
-| QoS report | `Slot %u : QOS %u {%03u %03u %03u %02u %03d} {%02u %02u %u}` — multi-field QoS metric format, partly link-quality |
+| QoS report | `Slot %u : QOS %u {%03u %03u %03u %02u %03d} {%02u %02u %u}`: multi-field QoS metric format, partly link-quality |
 
 Bond storage paths in the Zephyr settings subsystem:
-- `esb/bond` — primary bond (slot's main pairing)
-- `esb/bond_2` — **secondary bond** (matches the GamersNexus-reported "controller remembers 2 puck pairings" spec)
-- `bonds` — bond list
-- `bt/keys` — Bluetooth key storage
+- `esb/bond`: primary bond (slot's main pairing)
+- `esb/bond_2`: **secondary bond** (matches the GamersNexus-reported "controller remembers 2 puck pairings" spec)
+- `bonds`: bond list
+- `bt/keys`: Bluetooth key storage
 
 Per-instance UUIDs printed for debugging:
-- `ibex%d_proteus_uuid : 0x%08X` — Controller-to-Puck pairing UUID (slot N)
-- **`ibex%d_ibex_uuid : 0x%08X`** — **Controller-to-Controller pairing UUID** (one Triton bonded to another Triton). Suggests Triton firmware has paths for direct controller-to-controller communication, not just controller-to-puck. Unconfirmed what this is used for — possibly multiplayer-mode pairing or chord-input bridging.
+- `ibex%d_proteus_uuid : 0x%08X`: Controller-to-Puck pairing UUID (slot N)
+- **`ibex%d_ibex_uuid : 0x%08X`**: **Controller-to-Controller pairing UUID** (one Triton bonded to another Triton). Suggests Triton firmware has paths for direct controller-to-controller communication, not just controller-to-puck. Unconfirmed what this is used for, possibly multiplayer-mode pairing or chord-input bridging.
 
 ## PROTEUS debug UART shell (physical-pin access)
 
 PROTEUS_FW contains strings indicating a **hidden UART debug shell**:
-- `shell.shell_uart`, `shell_uart_backend` — Zephyr's shell subsystem over UART
+- `shell.shell_uart`, `shell_uart_backend`: Zephyr's shell subsystem over UART
 - Commands include:
-  - `radio_send_channels <timeout_s> [channels]` — transmit burst on specific RF channels
-  - `channel_cost_show` — dump the channel-cost table
-  - `background_rssi_show` (alias `bg_rssi`) — dump the background RSSI map
+  - `radio_send_channels <timeout_s> [channels]`: transmit burst on specific RF channels
+  - `channel_cost_show`: dump the channel-cost table
+  - `background_rssi_show` (alias `bg_rssi`): dump the background RSSI map
 
 UART pins exist physically on the Puck PCB. Accessing them requires hardware probing (soldering or a pogo-pin jig). Useful for ESB-radio characterisation.
 
 ## Version-to-version firmware diffs
+
+The two diffs below were done by hand. `tools/fw_changelog.py` produces the same kind of report for any two versions, or sweeps the whole Ibex-Firmware archive at once. See the Tools list in the [README](../README.md).
 
 ### PROTEUS: `69FA587F` (older) vs `69FBD45D` (newer, mandatory update)
 
 - **Total size**: 199,520 → 199,312 bytes (-208 B)
 - **Payload size header**: `0x30b40 → 0x30a70`
 - **Checksum header**: `0x172e95d0 → 0x5c8d6a55` (fully different content)
-- **5,659 contiguous diff blocks** across the file — not a single bug-fix region but a full recompile
-- **Zero strings added or removed** — feature surface unchanged
-- **Function prologs**: +5 (852 → 857) — minor restructure
+- **5,659 contiguous diff blocks** across the file: not a single bug-fix region but a full recompile
+- **Zero strings added or removed**: feature surface unchanged
+- **Function prologs**: +5 (852 → 857), minor restructure
 - **BL call sites**: identical (2,955)
 - **Reset handler shifted**: `0x0001198D → 0x00011899` (~244 bytes earlier in flash)
 
@@ -872,16 +874,16 @@ Largest single diff block: **`0x022CE1..0x022E9F` (446 bytes)**. This is in the 
 - **374 strings removed** in newer build, **11 added**
 - Removed strings are mostly Zephyr debug/log strings (BLE stack verbose, IMU debug printf, RGB-LED test, settings-store telemetry)
 
-The ~8% size reduction is consistent with flipping `LOG_LEVEL` from `LOG_LEVEL_DBG` (4) to `LOG_LEVEL_INF` (3) in a Zephyr Kconfig — a one-line release-build change.
+The ~8% size reduction is consistent with flipping `LOG_LEVEL` from `LOG_LEVEL_DBG` (4) to `LOG_LEVEL_INF` (3) in a Zephyr Kconfig, a one-line release-build change.
 
-The 11 added strings include several short scrambled-looking strings: `zohejfglakpk`, `zyscmlipekno`, `}llkjyjtg]vo`, `~tnhuskjekzw{`. Possibly compiler-generated lookup tables or string-obfuscation — worth a separate investigation (XOR / shift analysis). The other added strings are mostly function/module names like `ibexesb_common` and `smf_set_state` — suggests minor API additions.
+The 11 added strings include several short scrambled-looking strings: `zohejfglakpk`, `zyscmlipekno`, `}llkjyjtg]vo`, `~tnhuskjekzw{`. Possibly compiler-generated lookup tables or string-obfuscation, worth a separate investigation (XOR / shift analysis). The other added strings are mostly function/module names like `ibexesb_common` and `smf_set_state` (suggests minor API additions).
 
 ## What static analysis could still bring
 
 - **Capstone disassembly** of specific functions (e.g. the ESB cost-function near offset `0x022CE1`)
-- **`.bss` section size** — derivable from `(initial_sp - SRAM_top)`
-- **Decoding the 11 scrambled strings** in newer IBEX — XOR-with-rolling-offset / Caesar shift / lookup-table analysis
-- **PROTEUS UART shell** — physical probe of the Puck PCB UART pins, then `radio_send_channels` + `channel_cost_show` for live ESB characterisation
+- **`.bss` section size**: derivable from `(initial_sp - SRAM_top)`
+- **Decoding the 11 scrambled strings** in newer IBEX: XOR-with-rolling-offset / Caesar shift / lookup-table analysis
+- **PROTEUS UART shell**: physical probe of the Puck PCB UART pins, then `radio_send_channels` + `channel_cost_show` for live ESB characterisation
 
 ## Privacy Notes
 

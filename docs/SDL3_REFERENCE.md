@@ -1,4 +1,4 @@
-# SDL3 reference — Triton-related content
+# SDL3 reference: Triton-related content
 
 What SDL3's open-source code says about the Steam Controller 2 (Triton) and its dongles. Most of it lives in Valve's commit `1998b6504` (Sam Lantinga, Nov 12 2025) plus the longer-standing shared headers.
 
@@ -36,9 +36,9 @@ enum ETritonReportIDTypes
 | `0x79` | `WIRELESS_STATUS` | `TritonWirelessStatus_t` | 2 |
 
 Reports in the HID descriptor that are **not** in this enum:
-- `0x40`, `0x41` (Lizard-mode mouse/keyboard) — standard HID boot-protocol, suppressed when SDL3 is in control
-- `0x44` (6 B) — present in descriptor, never observed; SDL3 doesn't handle it
-- `0x7b` (13 B) — observed at ~2 Hz, not in SDL3 enum, **genuinely undocumented** (we hypothesize a Proteus-side puck status report)
+- `0x40`, `0x41` (Lizard-mode mouse/keyboard): standard HID boot-protocol, suppressed when SDL3 is in control
+- `0x44` (6 B): present in descriptor, never observed; SDL3 doesn't handle it
+- `0x7b` (13 B): observed at ~2 Hz, not in SDL3 enum, **genuinely undocumented** (we hypothesize a Proteus-side puck status report)
 
 ## All Triton output report IDs (`ValveTritonOutReportMessageIDs`, `controller_structs.h:225`)
 
@@ -54,7 +54,7 @@ typedef enum
 } ValveTritonOutReportMessageIDs;
 ```
 
-**Implication for SteamHapticsSinger:** their "Note-On" (0x83) is the public `HAPTIC_LFO_TONE` (continuous-tone generator at a given frequency), and "Note-Off" (0x81) is `HAPTIC_PULSE`. Functional naming for a MIDI-player use case, but canonically these are the LFO-tone and pulse haptic-message types. Their `byte[1] = actuator_id` corresponds to the `side` field in the struct (per controller_structs.h: `0x01 = L, 0x02 = R, 0x03 = Both` — though SteamHapticsSinger's empirical IDs 0/1/3/4 suggest the Triton firmware uses `side` as a per-actuator index, not L/R/Both).
+**Implication for SteamHapticsSinger:** their "Note-On" (0x83) is the public `HAPTIC_LFO_TONE` (continuous-tone generator at a given frequency), and "Note-Off" (0x81) is `HAPTIC_PULSE`. Functional naming for a MIDI-player use case, but canonically these are the LFO-tone and pulse haptic-message types. Their `byte[1] = actuator_id` corresponds to the `side` field in the struct (per controller_structs.h: `0x01 = L, 0x02 = R, 0x03 = Both`, though SteamHapticsSinger's empirical IDs 0/1/3/4 suggest the Triton firmware uses `side` as a per-actuator index, not L/R/Both).
 
 Full message structs at `controller_structs.h:163-223`. The most powerful is `MsgHapticLfoTone` (10 bytes payload + report ID):
 
@@ -71,7 +71,7 @@ typedef struct {
 
 The full haptic API also exposes `MsgHapticLogSweep`, `MsgHapticScript` (with `script_id`), and a multi-mode `MsgTriggerHaptic` with 8 sub-modes (TICK / CLICK / TONE / RUMBLE / NOISE / SCRIPT / LOG_SWEEP / OFF). Most of these are unexplored from a higher-level RE angle.
 
-## Wire format — main state report (`TritonMTUFull_t`, `controller_structs.h:596`)
+## Wire format: main state report (`TritonMTUFull_t`, `controller_structs.h:596`)
 
 Already covered in [HID_REPORT_FORMAT.md](HID_REPORT_FORMAT.md). The complete struct is `#pragma pack(1)`:
 - 1 B seq_num
@@ -82,13 +82,13 @@ Already covered in [HID_REPORT_FORMAT.md](HID_REPORT_FORMAT.md). The complete st
 - 4 B IMU timestamp
 - 6 B accel (3× int16)
 - 6 B gyro (3× int16)
-- 8 B quaternion (4× int16) — Full variant only
+- 8 B quaternion (4× int16), Full variant only
 
 **Note: the SDL driver parses with `TritonMTUNoQuat_t` and silently ignores the trailing 8 quaternion bytes if the report is `Full` (54 B vs. 46 B).**
 
 ## How SDL3 transforms the raw values (driver lines 220-279)
 
-This is publicly documented in the driver — listed here so we don't claim to have figured it out:
+This is publicly documented in the driver, listed here so we don't claim to have figured it out:
 
 **Trigger** (line 222):
 ```c
@@ -96,35 +96,35 @@ SDL_SendJoystickAxis(..., SDL_GAMEPAD_AXIS_LEFT_TRIGGER,
                     (int)pTritonReport->sTriggerLeft * 2 - 32768);
 ```
 
-**Sticks** — Y is negated (lines 229, 233):
+**Sticks**, Y is negated (lines 229, 233):
 ```c
 SDL_SendJoystickAxis(..., SDL_GAMEPAD_AXIS_LEFTY, -pTritonReport->sLeftStickY);
 SDL_SendJoystickAxis(..., SDL_GAMEPAD_AXIS_RIGHTY, -pTritonReport->sRightStickY);
 ```
 
-**Gyro** — axis swizzle and ±2000 °/s scale (lines 240-242):
+**Gyro**, axis swizzle and ±2000 °/s scale (lines 240-242):
 ```c
 values[0] = (pTritonReport->imu.sGyroX / 32768.0f) * (2000.0f * (SDL_PI_F / 180.0f));  // X
 values[1] = (pTritonReport->imu.sGyroZ / 32768.0f) * (2000.0f * (SDL_PI_F / 180.0f));  // Y ← raw Z
 values[2] = (-pTritonReport->imu.sGyroY / 32768.0f) * (2000.0f * (SDL_PI_F / 180.0f)); // Z ← raw -Y
 ```
 
-The quaternion fields (`sGyroQuatW/X/Y/Z`) come **directly from the IMU chip's on-board Smart Fusion Engine** (ST LSM6DSV16X — confirmed in `FIRMWARE_PROTOCOL.md` §"External I2C peripherals"). The host doesn't need to fuse gyro+accel itself.
+The quaternion fields (`sGyroQuatW/X/Y/Z`) come **directly from the IMU chip's on-board Smart Fusion Engine** (ST LSM6DSV16X, confirmed in `FIRMWARE_PROTOCOL.md` §"External I2C peripherals"). The host doesn't need to fuse gyro+accel itself.
 
-**Accel** — same swizzle, ±2 g scale (lines 245-247):
+**Accel**, same swizzle, ±2 g scale (lines 245-247):
 ```c
 values[0] = (pTritonReport->imu.sAccelX / 32768.0f) * 2.0f * SDL_STANDARD_GRAVITY;
 values[1] = (pTritonReport->imu.sAccelZ / 32768.0f) * 2.0f * SDL_STANDARD_GRAVITY;
 values[2] = (-pTritonReport->imu.sAccelY / 32768.0f) * 2.0f * SDL_STANDARD_GRAVITY;
 ```
 
-**Trackpad** — Y is flipped, normalize to [0,1] (lines 257-258):
+**Trackpad**, Y is flipped, normalize to [0,1] (lines 257-258):
 ```c
 ctx->left_touch_x =  pTritonReport->sLeftPadX / 65536.0f + 0.5f;
 ctx->left_touch_y = -pTritonReport->sLeftPadY / 65536.0f + 0.5f;
 ```
 
-**Trackpad pressure** — normalize to [0,1] (line 265):
+**Trackpad pressure**, normalize to [0,1] (line 265):
 ```c
 pTritonReport->sPressureLeft / 32768.0f
 ```
@@ -133,9 +133,9 @@ pTritonReport->sPressureLeft / 32768.0f
 
 | Constant | Value | Source |
 |---|---|---|
-| `TRITON_SENSOR_UPDATE_INTERVAL_US` | 4032 | Driver, line 36 — "Always 1kHz according to USB descriptor, but actually about 4 ms" → ~248 Hz nominal. (Our `frame_rate=11` attribute reads ~266 Hz on the device; minor discrepancy.) |
-| `TRITON_RUMBLE_RESEND_INTERVAL_MS` | 40 | Driver, line 39 — "Steam Controller hardware safety timeout is around 50ms, so we resend rumble every 40ms" |
-| Lizard refresh period | 3000 ms | Driver, line 427 — `(now - ctx->last_lizard_update) >= 3000` |
+| `TRITON_SENSOR_UPDATE_INTERVAL_US` | 4032 | Driver, line 36: "Always 1kHz according to USB descriptor, but actually about 4 ms" → ~248 Hz nominal. (Our `frame_rate=11` attribute reads ~266 Hz on the device; minor discrepancy.) |
+| `TRITON_RUMBLE_RESEND_INTERVAL_MS` | 40 | Driver, line 39: "Steam Controller hardware safety timeout is around 50ms, so we resend rumble every 40ms" |
+| Lizard refresh period | 3000 ms | Driver, line 427: `(now - ctx->last_lizard_update) >= 3000` |
 
 ## Charge states (`controller_structs.h:639`)
 
@@ -150,7 +150,7 @@ enum EChargeState
 };
 ```
 
-(Our earlier docs listed only 3 — Reset and SrcValidate were missing.)
+(Our earlier docs listed only 3: Reset and SrcValidate were missing.)
 
 ## Wireless states (`controller_structs.h:562`)
 
@@ -185,7 +185,7 @@ The `FeatureReportMessageIDs` enum is shared between SC1, Deck, and Triton. The 
 | Hex | Symbol | Notes |
 |---|---|---|
 | `0x80` | `SET_DIGITAL_MAPPINGS` | (note: shares value space with output-report IDs; feature reports use a different transport) |
-| `0x83` | `GET_ATTRIBUTES_VALUES` | The opcode we send to query the 31-tag attribute table — confirmed our usage |
+| `0x83` | `GET_ATTRIBUTES_VALUES` | The opcode we send to query the 31-tag attribute table, confirmed our usage |
 | `0x86` | `FACTORY_RESET` | ⚠️ |
 | `0x87` | `SET_SETTINGS_VALUES` | What SDL3 uses to disable Lizard mode and set IMU mode |
 | `0x89` | `GET_SETTINGS_VALUES` | Read current setting values |
@@ -227,7 +227,7 @@ The `FeatureReportMessageIDs` enum is shared between SC1, Deck, and Triton. The 
 | 50 | `SETTING_SLEEP_INACTIVITY_TIMEOUT` | Idle-to-sleep delay |
 | 60 | `SETTING_PRESSURE_MODE` | Trackpad pressure mode |
 | 62 | `SETTING_TRIGGER_MODE` | Analog vs. digital trigger behaviour |
-| 64 | `SETTING_FRAME_RATE` | The controller's reporting rate — settable! |
+| 64 | `SETTING_FRAME_RATE` | The controller's reporting rate (settable!) |
 | 70 | `SETTING_HAPTICS_ENABLED` | Master haptic on/off |
 | 71 | `SETTING_STEAM_WATCHDOG_ENABLE` | The Lizard-reactivation watchdog itself |
 | 76 | `SETTING_HAPTIC_MASTER_GAIN_DB` | Global haptic gain |
@@ -258,45 +258,45 @@ Nine modes. The trackpad can be configured per-pad as: absolute-mouse, relative-
 
 ## What the SDL3 driver does NOT yet support
 
-- **LED control** — `SetJoystickLED` returns `SDL_Unsupported()`. The Steam logo lights up but isn't programmatically controlled via SDL.
-- **Trigger rumble** — `RumbleJoystickTriggers` returns `SDL_Unsupported()`. Trigger haptics (if any) aren't exposed.
-- **Sensor reads in `Triton_BLE` mode** — driver only sends sensors when in non-BLE mode (`report_sensors` check).
-- **The `SendJoystickEffect` pass-through** — accepts arbitrary 64-byte Feature Reports, so advanced clients can inject their own raw commands. This is the documented escape hatch for haptic-API users.
+- **LED control**: `SetJoystickLED` returns `SDL_Unsupported()`. The Steam logo lights up but isn't programmatically controlled via SDL.
+- **Trigger rumble**: `RumbleJoystickTriggers` returns `SDL_Unsupported()`. Trigger haptics (if any) aren't exposed.
+- **Sensor reads in `Triton_BLE` mode**: driver only sends sensors when in non-BLE mode (`report_sensors` check).
+- **The `SendJoystickEffect` pass-through**: accepts arbitrary 64-byte Feature Reports, so advanced clients can inject their own raw commands. This is the documented escape hatch for haptic-API users.
 
 ## Implications for our own RE
 
 Now-recognised-as-public facts (we should not claim as novel):
 
-1. **Output haptic report IDs 0x80-0x85** — SDL3 has the full enum and structs.
-2. **Battery struct** (`TritonBatteryStatus_t`, 14 bytes, 8 fields) — SDL3-public.
+1. **Output haptic report IDs 0x80-0x85**: SDL3 has the full enum and structs.
+2. **Battery struct** (`TritonBatteryStatus_t`, 14 bytes, 8 fields): SDL3-public.
 3. **5 charge states** (we listed 3; SDL3 has 5).
-4. **Wireless status struct** (1 byte: state, with two values) — SDL3-public.
-5. **Setting IDs and their numeric values** — all in `controller_constants.h`.
-6. **`SETTING_IMU_MODE = 48` and bit-flags including raw_accel/raw_gyro** — SDL3-public.
-7. **IMU axis swizzle and ±2000°/s, ±2g scaling** — SDL3 driver lines 240-248.
-8. **Stick Y inversion** — SDL3 driver lines 229, 233.
-9. **Trackpad Y flip and normalization** — SDL3 driver lines 257-258.
-10. **Trigger scaling formula** — SDL3 driver line 222.
-11. **Lizard-mode refresh interval of 3000 ms** — SDL3 driver line 427.
-12. **Rumble report = 10 bytes** — `controller_structs.h` `HID_RUMBLE_OUTPUT_REPORT_BYTES = 10`.
-13. **`HID_FEATURE_REPORT_BYTES = 64`** — `controller_structs.h:26`.
+4. **Wireless status struct** (1 byte: state, with two values): SDL3-public.
+5. **Setting IDs and their numeric values**: all in `controller_constants.h`.
+6. **`SETTING_IMU_MODE = 48` and bit-flags including raw_accel/raw_gyro**: SDL3-public.
+7. **IMU axis swizzle and ±2000°/s, ±2g scaling**: SDL3 driver lines 240-248.
+8. **Stick Y inversion**: SDL3 driver lines 229, 233.
+9. **Trackpad Y flip and normalization**: SDL3 driver lines 257-258.
+10. **Trigger scaling formula**: SDL3 driver line 222.
+11. **Lizard-mode refresh interval of 3000 ms**: SDL3 driver line 427.
+12. **Rumble report = 10 bytes**: `controller_structs.h` `HID_RUMBLE_OUTPUT_REPORT_BYTES = 10`.
+13. **`HID_FEATURE_REPORT_BYTES = 64`**: `controller_structs.h:26`.
 14. **The full `FeatureReportMessageIDs` enum** of 60+ command IDs.
-15. **The `ControllerAudio` enum** — controller has audio-cue slots.
+15. **The `ControllerAudio` enum**: controller has audio-cue slots.
 
 Still genuinely first-publicly-documented in this project (cross-checked against SDL3):
 
 - `hardwareupdater.x86_64` as Steam-bundled PyInstaller goldmine
-- Bootloader CDC ACM PIDs `0x1005` (Triton-BL) and `0x1007` (Proteus-BL) — not in SDL3
+- Bootloader CDC ACM PIDs `0x1005` (Triton-BL) and `0x1007` (Proteus-BL), not in SDL3
 - HDLC framing constants `0xAD/0xAE/0xAC` and the escape table
 - Update-protocol message IDs `0x1234..0x1238`
 - Firmware file header layout (32 bytes: magic + size + checksum + 20 reserved)
 - Firmware magics `0xD2D86467` (Triton) and `0x2E795631` (Proteus)
-- The `EDeviceType` enum with 7 entries (Triton_BL/USB/BLE/ESB, Proteus_BL/USB, Nereid_USB) — semantic mapping from `hardwareupdater.py`
-- Live-feature-report routing (`fr_id=2, op=0x83` for puck, `fr_id=1, op=0x83` for controller via ESB — `fr_id` selects the target) — a wrapper around the public `ID_GET_ATTRIBUTES_VALUES` opcode, but the multi-device routing pattern wasn't documented
-- 31-tag Triton-specific attribute taxonomy (the shared `ControllerAttributes` enum only has ~13 entries — our additional tags are Triton-only)
+- The `EDeviceType` enum with 7 entries (Triton_BL/USB/BLE/ESB, Proteus_BL/USB, Nereid_USB), semantic mapping from `hardwareupdater.py`
+- Live-feature-report routing (`fr_id=2, op=0x83` for puck, `fr_id=1, op=0x83` for controller via ESB: `fr_id` selects the target), a wrapper around the public `ID_GET_ATTRIBUTES_VALUES` opcode, but the multi-device routing pattern wasn't documented
+- 31-tag Triton-specific attribute taxonomy (the shared `ControllerAttributes` enum only has ~13 entries: our additional tags are Triton-only)
 - Firmware-string analysis: MP2733 charger, fuel-gauge IC, RGBW LEDs, Zephyr RTOS markers, ARM GCC 14 toolchain
 - ESB `esb-controller@0..3` slot strings as proof of the 4-slot architecture
-- The unobserved `0x7b` (13 B) report — not in SDL3's enum, ~2 Hz, likely Proteus-side puck status
+- The unobserved `0x7b` (13 B) report: not in SDL3's enum, ~2 Hz, likely Proteus-side puck status
 - Frame-rate refinement to ~266 Hz via the `frame_rate=11` attribute query (vs. SDL3's commented "~4 ms" approximation)
 - Firmware build-identifier at offset `0x012C` cross-referenced with the `"GIT_SHA_%s"` boot banner
 
@@ -308,4 +308,4 @@ cd SDL
 grep -rn 'Triton\|Proteus\|Nereid' src/joystick/
 ```
 
-The driver and structs files are around 1900 lines total — entirely readable in one sitting.
+The driver and structs files are around 1900 lines total, entirely readable in one sitting.

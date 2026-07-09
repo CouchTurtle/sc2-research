@@ -2,9 +2,9 @@
 
 Notes and tools for the Steam Controller 2 (Triton): HID input layout, firmware update protocol, feature-report routing, and static analysis of the firmware blobs.
 
-> **Status:** a host-side reference and learning artifact, lightly maintained. For actively-developed SC2 work — open custom firmware, a DIY replacement puck, Linux drivers — see the **Related SC2 projects** list under [Background](#background). Corrections here are still welcome via issues / PRs.
+> **Status:** a host-side reference and learning artifact, lightly maintained. For actively-developed SC2 work (open custom firmware, a DIY replacement puck, Linux drivers) see the **Related SC2 projects** list under [Background](#background). Corrections here are still welcome via issues / PRs.
 
-Most of this comes from extracting `hardwareupdater.x86_64` — the PyInstaller bundle that ships with the Steam client — and verifying against an actual SC2 + Puck on a Steam Deck (SteamOS) with controller firmware `bcdDevice 0.02`. Hobby project with heavy AI assistance — see [Disclaimer](#disclaimer).
+Most of this comes from extracting `hardwareupdater.x86_64` (the PyInstaller bundle that ships with the Steam client) and verifying against an actual SC2 + Puck on a Steam Deck (SteamOS) with controller firmware `bcdDevice 0.02`. Hobby project with heavy AI assistance (see [Disclaimer](#disclaimer)).
 
 Covers: SC2 (USB `28DE:1302/1303`), the Proteus puck (`28DE:1304`), and the parallel Nereid dongle (`28DE:1305`). Nereid is plausibly the Steam-Machine-integrated dongle, based on SDL3 commit timing and the absence of a Nereid bootloader path in Steam's user-facing updater.
 
@@ -14,23 +14,24 @@ Covers: SC2 (USB `28DE:1302/1303`), the Proteus puck (`28DE:1304`), and the para
 |---|---|
 | [`docs/FIRMWARE_PROTOCOL.md`](docs/FIRMWARE_PROTOCOL.md) | Update protocol: HDLC framing, message IDs, firmware-file format, bootloader-mode switching, live feature-report attribute queries, ARM Cortex-M static analysis. |
 | [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) | RE notes: PyInstaller-bundle extraction, bytecode disassembly without a decompiler, the InHand-flag debunking, capture-timing pitfalls, SteamOS ACL quirks, multi-device `fr_id` routing. |
-| [`docs/CONTROLLER_CAPABILITIES.md`](docs/CONTROLLER_CAPABILITIES.md) | Hardware notes — chip identification, USB topology, haptic actuator sides, components found via firmware-string analysis. |
+| [`docs/CONTROLLER_CAPABILITIES.md`](docs/CONTROLLER_CAPABILITIES.md) | Hardware notes: chip identification, USB topology, haptic actuator sides, components found via firmware-string analysis. |
 | [`docs/HID_REPORT_FORMAT.md`](docs/HID_REPORT_FORMAT.md) | The 54-byte Report-0x42 layout (from SDL3, verified against ~9k frames), puck USB topology, Lizard-mode timing, sub-reports `0x43` (battery) and `0x7b` (the one Triton input report ID not in SDL3), SteamOS access notes. |
-| [`docs/SDL3_REFERENCE.md`](docs/SDL3_REFERENCE.md) | Cross-reference of what SDL3's open-source code says about Triton — report IDs, output haptic message types, settings, audio cues, charge states, IMU axis swizzle and scaling, trackpad transforms, timing constants. |
-| [`docs/HAPTICS.md`](docs/HAPTICS.md) | Cross-reference of the haptic + audio output reports (`0x80`–`0x89`), reverse-engineered by iczero — actuator sides, script IDs, audio-stream formats, the `0x44` feedback channel. |
+| [`docs/SDL3_REFERENCE.md`](docs/SDL3_REFERENCE.md) | Cross-reference of what SDL3's open-source code says about Triton: report IDs, output haptic message types, settings, audio cues, charge states, IMU axis swizzle and scaling, trackpad transforms, timing constants. |
+| [`docs/HAPTICS.md`](docs/HAPTICS.md) | Cross-reference of the haptic + audio output reports (`0x80`–`0x89`), reverse-engineered by iczero: actuator sides, script IDs, audio-stream formats, the `0x44` feedback channel. |
 
 ## Tools
 
-Python 3.10+, stdlib only. Run as the `deck` user on SteamOS (not `sudo` — root is blocked by the hidraw ACL).
+Python 3.10+, stdlib only. Run as the `deck` user on SteamOS (not `sudo`: root is blocked by the hidraw ACL).
 
 Firmware analysis & extraction:
 
 | Tool | What it does |
 |---|---|
-| `tools/extract_pyinst.py` | Minimal PyInstaller bundle extractor — MEI cookie + TOC walker. |
+| `tools/extract_pyinst.py` | Minimal PyInstaller bundle extractor: MEI cookie + TOC walker. |
 | `tools/walk_pyc.py` | Walks marshaled Python code objects, lists nested functions + constants. |
 | `tools/analyze_fw.py` | Parses ARM Cortex-M firmware blobs (header, vector table, IRQ handlers, strings). |
 | `tools/attr_query.py` | Sends HID Feature-Reports via `ioctl` to query device attributes. |
+| `tools/fw_changelog.py` | Diffs two firmware versions (or sweeps the whole archive) into a plain "what changed" report: size, and which strings appeared or vanished. Pulls the blobs from the Ibex-Firmware archive, so no controller is needed. |
 
 Live capture & observation:
 
@@ -82,7 +83,7 @@ Adjacent / historical:
 
 Hardware identification:
 
-- [iFixit Steam Controller (2nd Generation)](https://www.ifixit.com/Device/Steam_Controller_%282nd_Generation%29) — chip markings read as nRF52833. Confirmed: the SoC is the **nRF52833** (an earlier version of this repo wrongly "corrected" this to nRF52840 — see `docs/FIRMWARE_PROTOCOL.md` §Hardware inference for the retraction).
+- [iFixit Steam Controller (2nd Generation)](https://www.ifixit.com/Device/Steam_Controller_%282nd_Generation%29) — chip markings read as nRF52833. Confirmed: the SoC is the **nRF52833** (an earlier version of this repo wrongly "corrected" this to nRF52840; see `docs/FIRMWARE_PROTOCOL.md` §Hardware inference for the retraction).
 - [PC Gamer 2026 teardown](https://www.pcgamer.com/hardware/game-pads/steam-controller-2026-review/), [GamersNexus review](https://gamersnexus.net/handheld-pcs-peripherals/valve-steam-controller-review-latency-benchmarks-battery-life), [PCGamingWiki](https://www.pcgamingwiki.com/wiki/Controller:Steam_Controller_(2nd_generation)).
 
 Codenames that were already public before this work:
@@ -94,11 +95,11 @@ Codenames that were already public before this work:
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Some patterns credited inline to the BSD-3-Clause SteamHapticsSinger.
+MIT: see [LICENSE](LICENSE). Some patterns credited inline to the BSD-3-Clause SteamHapticsSinger.
 
 ## Disclaimer
 
-Hobby project, done with heavy AI assistance (Claude) for hypothesis-testing, cross-referencing, and drafting. The hardware testing, firmware extraction, and packet captures were on my own Steam Deck (SteamOS) with an SC2 + Puck (USB `bcdDevice 0.02`). Cross-checked against SDL3 source where possible; I may have missed conventions someone with deeper RE background would catch — corrections via issues / PRs welcome.
+Hobby project, done with heavy AI assistance (Claude) for hypothesis-testing, cross-referencing, and drafting. The hardware testing, firmware extraction, and packet captures were on my own Steam Deck (SteamOS) with an SC2 + Puck (USB `bcdDevice 0.02`). Cross-checked against SDL3 source where possible; I may have missed conventions someone with deeper RE background would catch. Corrections via issues / PRs welcome.
 
 Baseline: the firmware blobs analysed here are **`IBEX_FW_69FA5889` + `69FE17FF`** (Triton) and **`PROTEUS_FW_69FA587F` + `69FBD45D`** (Proteus), all from early May 2026. Both pairs are byte-identically mirrored in [`OpenSteamController/Ibex-Firmware`](https://github.com/OpenSteamController/Ibex-Firmware), so anyone can reproduce the analysis without their own Steam install:
 
@@ -110,4 +111,4 @@ python3 tools/analyze_fw.py IBEX_FW_69FE17FF.fw
 
 Valve has shipped further updates since (the June 2026 release added LED dimming in settings + trigger-deadzone tweaks). The protocol layer is expected to be stable across these; static-analysis offsets are tied to the specific FW versions above.
 
-No proprietary code or firmware blobs are redistributed here — for the blobs see [`OpenSteamController/Ibex-Firmware`](https://github.com/OpenSteamController/Ibex-Firmware). No affiliation with Valve.
+No proprietary code or firmware blobs are redistributed here. For the blobs see [`OpenSteamController/Ibex-Firmware`](https://github.com/OpenSteamController/Ibex-Firmware). No affiliation with Valve.

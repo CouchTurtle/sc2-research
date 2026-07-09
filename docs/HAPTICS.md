@@ -20,7 +20,7 @@ Most reports take a `side` byte. It is **not consistent across reports**:
 
 | ID | Name | Body |
 |---|---|---|
-| `0x80` | HAPTIC_RUMBLE | `type` u8, `intensity` u16, `left_speed` u16, `left_gain` i8 dB, `right_speed` u16, `right_gain` i8 dB (no side field — explicit L/R) |
+| `0x80` | HAPTIC_RUMBLE | `type` u8, `intensity` u16, `left_speed` u16, `left_gain` i8 dB, `right_speed` u16, `right_gain` i8 dB (no side field; explicit L/R) |
 | `0x81` | HAPTIC_PULSE | `side` u8, `on_us` u16, `off_us` u16, `repeat` u16 |
 | `0x82` | HAPTIC_COMMAND | `side` u8, `command` u8 (0=STOP_ALL, 1=CLICK, 2=CLICK_STRONG), `gain` i8 dB |
 | `0x83` | HAPTIC_LFO_TONE | `side` u8, `gain` i8 dB, `frequency` u16 Hz, `duration` u16, `lfo_freq` u16 Hz, `lfo_depth` u8 |
@@ -33,7 +33,7 @@ Note: SteamHapticsSinger's "Note-On `0x83`" is `HAPTIC_LFO_TONE`; its "Note-Off 
 
 `0x01` CONTROLLER_ON · `0x02` CONTROLLER_VERY_ON · `0x03` TRILL_UP · `0x04` TRILL_DOWN · `0x05` CONTROLLER_OFF · `0x06` UP_FIVE · `0x07` DOWN_FIVE · `0x08` UP_SIX · `0x09` DOWN_SIX · `0x0a` WHOOP_UP_3 · `0x0b` WHOOP_DOWN · `0x0c` PHONE_RINGING_1 (the "Ping" in Identify Controller) · `0x0d` RINGBACK_TONE · `0x0e` PHONE_RINGING_2 · `0x0f` PHONE_RINGING_3 · `0x10` WILHELM_SCREAM (played when you drop the controller).
 
-## Reports 0x86–0x89 — audio streaming (not in SDL3)
+## Reports 0x86–0x89: audio streaming (not in SDL3)
 
 The actuators can play arbitrary PCM/u-law audio. `0x86` configures a stream; `0x87`/`0x88`/`0x89` push sample data.
 
@@ -53,9 +53,9 @@ Stream format (`param` value):
 | 4 | 8 kHz | 8-bit PCM | | 10 | 2 kHz | 8-bit u-law |
 | 5 | 4 kHz | 8-bit PCM | | 11 | 1 kHz | 8-bit u-law |
 
-The 8 kHz variants (param 0/4/8) are only valid on the internal motors — the trackpad actuators top out at 4 kHz. The puck's ~500 Hz USB poll rate can't sustain stereo 16-bit; wired (1 kHz) or a lower-bandwidth format is needed.
+The 8 kHz variants (param 0/4/8) are only valid on the internal motors; the trackpad actuators top out at 4 kHz. The puck's ~500 Hz USB poll rate can't sustain stereo 16-bit; wired (1 kHz) or a lower-bandwidth format is needed.
 
-## Report 0x44 — audio buffer feedback (input)
+## Report 0x44: audio buffer feedback (input)
 
 `ID_TRITON_AUDIO_BUFFER_FEEDBACK`. Body: `actuator` u8 (0=INT_LEFT, 1=INT_RIGHT, 3=TP_LEFT, 4=TP_RIGHT), `status` u8 bitfield:
 

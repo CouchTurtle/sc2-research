@@ -4,9 +4,9 @@
 
 ## Chip identification
 
-**Both Triton (controller) and Proteus (puck) use the Nordic nRF52833** (512 KB flash, 128 KB RAM, GPIO ports P0+P1, I2S, USB) — matching the [iFixit and PC Gamer teardowns](https://www.ifixit.com/Device/Steam_Controller_%282nd_Generation%29), which read the chip markings as nRF52833.
+**Both Triton (controller) and Proteus (puck) use the Nordic nRF52833** (512 KB flash, 128 KB RAM, GPIO ports P0+P1, I2S, USB), matching the [iFixit and PC Gamer teardowns](https://www.ifixit.com/Device/Steam_Controller_%282nd_Generation%29), which read the chip markings as nRF52833.
 
-An earlier version of this repo claimed nRF52840, treating the Device-Tree nodes `gpio@50000300` (GPIO Port P1) and `i2s@40025000` (I2S) in the firmware rodata as nRF52840-exclusive. **That was wrong.** The nRF52833 also has a second GPIO port (P1) and I2S ([Nordic nRF52833 Product Specification](https://docs.nordicsemi.com/bundle/ps_nrf52833/page/keyfeatures_html5.html)), so those nodes don't distinguish the two parts; the features that would (QSPI, CryptoCell, 1 MB flash, 256 KB RAM) never appear in the firmware. Independent confirmation: the [`mwdmwd/sc26re`](https://github.com/mwdmwd/sc26re) firmware-reimplementation project builds and flashes for `nrf52833` (512 KB / 128 KB) and uses the BBC micro:bit v2 — also an nRF52833 — as a same-SoC development target. Our own stack-pointer reads (~96 KB into SRAM) fit the 128 KB part.
+An earlier version of this repo claimed nRF52840, treating the Device-Tree nodes `gpio@50000300` (GPIO Port P1) and `i2s@40025000` (I2S) in the firmware rodata as nRF52840-exclusive. **That was wrong.** The nRF52833 also has a second GPIO port (P1) and I2S ([Nordic nRF52833 Product Specification](https://docs.nordicsemi.com/bundle/ps_nrf52833/page/keyfeatures_html5.html)), so those nodes don't distinguish the two parts; the features that would (QSPI, CryptoCell, 1 MB flash, 256 KB RAM) never appear in the firmware. Independent confirmation: the [`mwdmwd/sc26re`](https://github.com/mwdmwd/sc26re) firmware-reimplementation project builds and flashes for `nrf52833` (512 KB / 128 KB) and uses the BBC micro:bit v2 (also an nRF52833) as a same-SoC development target. Our own stack-pointer reads (~96 KB into SRAM) fit the 128 KB part.
 
 See [`docs/FIRMWARE_PROTOCOL.md`](FIRMWARE_PROTOCOL.md) §"Hardware inference" for the DT-address breakdown.
 
@@ -17,21 +17,21 @@ Both firmwares built with **ARM GCC 14 + newlib** on Jenkins CI, running **Zephy
 | Addr | Chip | Function |
 |---|---|---|
 | `0x10` | **Renesas/Dialog SLG4L48185** GreenPAK | Programmable mixed-signal IC, used as I2C-controlled GPIO expander (driver `gpio_greenpak`) |
-| `0x2C` | **Olympus** (Valve-internal codename) | Capacitive trackpad controller for both pads. `mwdmwd/sc26re` models it as a 32-bit register-mapped capacitive touch IC (vendor `0x0488`, product `0xd0c1`) — likely a custom or relabeled part. |
-| `0x4B` | **MPS MP2733** | USB-PD-capable battery charger with **integrated fuel-gauge**, BC1.2-compliant. `mwdmwd`'s `battery.c` reads state-of-charge directly from the MP2733's registers — there is no separate fuel-gauge IC. |
-| `0x6A` | **ST LSM6DSV16X** | 6-axis IMU (gyro + accel) with **on-chip Smart Fusion Engine** producing quaternions. Released by ST in 2024. This chip is what fills the `sGyroQuat*` fields in `TritonMTUFull_t.imu` — the SDL3 driver doesn't compute the quaternions in software, it just reads them from the chip. |
+| `0x2C` | **Olympus** (Valve-internal codename) | Capacitive trackpad controller for both pads. `mwdmwd/sc26re` models it as a 32-bit register-mapped capacitive touch IC (vendor `0x0488`, product `0xd0c1`), likely a custom or relabeled part. |
+| `0x4B` | **MPS MP2733** | USB-PD-capable battery charger with **integrated fuel-gauge**, BC1.2-compliant. `mwdmwd`'s `battery.c` reads state-of-charge directly from the MP2733's registers. There is no separate fuel-gauge IC. |
+| `0x6A` | **ST LSM6DSV16X** | 6-axis IMU (gyro + accel) with **on-chip Smart Fusion Engine** producing quaternions. Released by ST in 2024. This chip is what fills the `sGyroQuat*` fields in `TritonMTUFull_t.imu`. The SDL3 driver doesn't compute the quaternions in software, it just reads them from the chip. |
 
-Proteus (puck) has a much simpler I2C bus — only a single `ec-button-interface@50` at address `0x50` (small Embedded Controller for puck button readout). No IMU, no battery charger, no trackpads on the puck side.
+Proteus (puck) has a much simpler I2C bus: only a single `ec-button-interface@50` at address `0x50` (small Embedded Controller for puck button readout). No IMU, no battery charger, no trackpads on the puck side.
 
 ## USB topology (Puck = `28DE:1304`)
 
-7 interfaces — full table in [`HID_REPORT_FORMAT.md`](HID_REPORT_FORMAT.md):
-- 2× CDC ACM (iface 0+1) — accessible to neither `deck` nor `root` due to SteamOS MAC policy; purpose TBD
-- 5× HID (iface 2-6) — 4 controller slots + 1 status channel (iface 6 / hidraw13). Each paired controller occupies one slot. Puck supports up to 4 simultaneous controllers.
+7 interfaces (full table in [`HID_REPORT_FORMAT.md`](HID_REPORT_FORMAT.md)):
+- 2× CDC ACM (iface 0+1): accessible to neither `deck` nor `root` due to SteamOS MAC policy; purpose TBD
+- 5× HID (iface 2-6): 4 controller slots + 1 status channel (iface 6 / hidraw13). Each paired controller occupies one slot. Puck supports up to 4 simultaneous controllers.
 
 Slot ↔ hidraw mapping confirmed empirically by the `esb-controller@0..3` strings in PROTEUS_FW.
 
-## Haptic output — actuator sides
+## Haptic output: actuator sides
 
 Valve's output haptic reports (`0x80`–`0x85`) address actuators by a "side" byte. The mapping (per [iczero's dissector](https://github.com/iczero/steam-controller-stuff) and the `mwdmwd/sc26re` firmware) is:
 
@@ -43,11 +43,11 @@ Valve's output haptic reports (`0x80`–`0x85`) address actuators by a "side" by
 | 4 | Right internal LRA motor (INT_RIGHT) |
 | 2 / 5 | "Both" (TP_BOTH / INT_BOTH), depending on report |
 
-Side numbering is **not** consistent across reports — the `0x81` pulse report swaps 0/1 (0 = TP_RIGHT, 1 = TP_LEFT) relative to the others. See [`HAPTICS.md`](HAPTICS.md) for per-report detail.
+Side numbering is **not** consistent across reports: the `0x81` pulse report swaps 0/1 (0 = TP_RIGHT, 1 = TP_LEFT) relative to the others. See [`HAPTICS.md`](HAPTICS.md) for per-report detail.
 
-(An earlier version of this table, taken from SteamHapticsSinger, labelled these as "back grips" with side 2 "unmapped" — that was incorrect. The SC2's four haptic actuators are the two trackpads and two internal motors.)
+(An earlier version of this table, taken from SteamHapticsSinger, labelled these as "back grips" with side 2 "unmapped". That was incorrect. The SC2's four haptic actuators are the two trackpads and two internal motors.)
 
-## Firmware string analysis — components not in any teardown
+## Firmware string analysis: components not in any teardown
 
 Found in IBEX_FW / PROTEUS_FW rodata via `tools/analyze_fw.py` (see `FIRMWARE_PROTOCOL.md §"Hardware components"`):
 
@@ -55,7 +55,7 @@ Found in IBEX_FW / PROTEUS_FW rodata via `tools/analyze_fw.py` (see `FIRMWARE_PR
 |---|---|
 | `"MP2733"` | MPS MP2733 USB-PD battery charger IC |
 | `"BC1.2 result callback"` | USB Battery Charging Spec 1.2 capable |
-| `"Fuel gauge device is not ready"` | The MP2733's **integrated** fuel-gauge (not a separate IC — see I2C table above) |
+| `"Fuel gauge device is not ready"` | The MP2733's **integrated** fuel-gauge (not a separate IC; see I2C table above) |
 | `"cal/rgbw_w"`, `"cal/rgbw_b/g/r"` | RGBW LEDs with per-channel calibration |
 | `"grip touch threshold failed to retrieve"` | Capacitive grip sensors (corresponds to HID bits `0x10000000` / `0x20000000` in the buttons field) |
 

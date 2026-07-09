@@ -5,9 +5,9 @@ Notes from working through the Triton/SC2 firmware and HID stack on a Steam Deck
 ## Summary
 
 - Vendor SDK / open-source contributions first. Valve commits Triton driver code directly to SDL3, so the wire format is free.
-- Codenames are layered — marketing name ≠ internal name ≠ firmware filename. Find one, grep for the others.
+- Codenames are layered: marketing name ≠ internal name ≠ firmware filename. Find one, grep for the others.
 - `#pragma pack(1)` makes adjacent-field bits look like flags. Confirm the surrounding field before naming a bit.
-- Capture-timing sync is fragile — auto-countdown + background process = invalid data when the user can't see the clock. Use interactive Enter or a foreground tool.
+- Capture-timing sync is fragile: auto-countdown + background process = invalid data when the user can't see the clock. Use interactive Enter or a foreground tool.
 - Bytecode disassembly works without a decompiler: `marshal.loads()` + `dis.dis()` from Python's stdlib are enough for PyInstaller bundles.
 - SteamOS hidraw ACLs: the `deck` user has more access than `root`. Don't `sudo`.
 
@@ -22,12 +22,12 @@ Notes from working through the Triton/SC2 firmware and HID stack on a Steam Deck
 
 For Triton/SC2 specifically, the three highest-leverage sources are:
 - **SDL3 mainline** (Valve commits the driver directly): `controller_structs.h`, `SDL_hidapi_steam_triton.c` → complete wire format for Report 0x42, all 30 button bits, MTU structs
-- **`~/.local/share/Steam/bin/hardwareupdater/hardwareupdater.x86_64`** — PyInstaller bundle containing the entire update stack in Python 3.12
-- **`~/.local/share/Steam/logs/controller.txt`** — leaks Steam-internal C++ class names like `CGetTritonDonglePairingBondWorkItem`
+- **`~/.local/share/Steam/bin/hardwareupdater/hardwareupdater.x86_64`**: PyInstaller bundle containing the entire update stack in Python 3.12
+- **`~/.local/share/Steam/logs/controller.txt`**: leaks Steam-internal C++ class names like `CGetTritonDonglePairingBondWorkItem`
 
 With those three, empirical captures become **verification**, not discovery.
 
-The codenames are layered: marketing "Steam Controller 2" / hardware "Ibex" or "Triton" / firmware-filename "IBEX_FW" / Wireless "ESB". `Triton` and `Ibex` were datamined publicly in Q4 2025; `Proteus` (puck) and `Nereid` (unknown role, `EDeviceType=6`) come out of `hardwareupdater.py` and are first publicly documented in this project. When you have one name, grep every binary for related strings — the others fall out.
+The codenames are layered: marketing "Steam Controller 2" / hardware "Ibex" or "Triton" / firmware-filename "IBEX_FW" / Wireless "ESB". `Triton` and `Ibex` were datamined publicly in Q4 2025; `Proteus` (puck) and `Nereid` (unknown role, `EDeviceType=6`) come out of `hardwareupdater.py` and are first publicly documented in this project. When you have one name, grep every binary for related strings. The others fall out.
 
 Privacy: redact USB iSerial strings and per-device serial numbers (`FX*`) before sharing captures. Firmware file hashes and the `hardware_id` integer (model revision) are not PII.
 
@@ -35,9 +35,9 @@ Privacy: redact USB iSerial strings and per-device serial numbers (`FX*`) before
 
 ### Concrete case: the "InHand" flag that wasn't
 
-We identified what looked like a sticky capacitive-touch flag at byte `0x0b` bit 1 — 0 % at idle, 100 % when controller held. Plausible, internally consistent, "found" within a day.
+We identified what looked like a sticky capacitive-touch flag at byte `0x0b` bit 1: 0 % at idle, 100 % when controller held. Plausible, internally consistent, "found" within a day.
 
-It was actually the **high byte of `sLeftStickX`** (bytes `0x0a-0x0b`). When the stick is biased into the 512-767 range — which happens systematically while holding the controller because of grip-induced tilt — the high byte is `0x02..0x03`, which sets bit 1.
+It was actually the **high byte of `sLeftStickX`** (bytes `0x0a-0x0b`). When the stick is biased into the 512-767 range (which happens systematically while holding the controller because of grip-induced tilt), the high byte is `0x02..0x03`, which sets bit 1.
 
 The fix took 5 minutes once the SDL3 struct layout was in front of us; the rabbit hole had taken a day.
 
@@ -55,7 +55,7 @@ See also: [HID_REPORT_FORMAT.md](HID_REPORT_FORMAT.md) for the verified layout.
 
 When empirical tests are compromised by sync errors: **don't** keep arguing with questionable data. Take the authoritative source code as truth, treat captures only as spot-check.
 
-Example: Our mapping captures had wrong action labels due to sync drift. But the individual captures clearly showed which bytes/bits were active. With SDL's `TritonButtons` table as schema, we could retroactively show that the captures are consistent with the table — even though the labels were wrong. No empirical re-verification needed.
+Example: Our mapping captures had wrong action labels due to sync drift. But the individual captures clearly showed which bytes/bits were active. With SDL's `TritonButtons` table as schema, we could retroactively show that the captures are consistent with the table, even though the labels were wrong. No empirical re-verification needed.
 
 ### Identifying firmware files: magic bytes over filenames
 
@@ -63,7 +63,7 @@ Vendors name firmware files creatively (codenames, timestamps, project IDs). Ins
 - `head -c 4 *.bin` and match magic values against the `*_MAGIC` constants from source code
 - For multiple firmware files: compare first bytes, identical magic = same firmware family
 
-For Triton: `0xD2D86467` LE for Triton/IBEX, `0x2E795631` LE for Proteus. Extracted from `hardwareupdater.py` as constants, then validated against the 4 local .fw files — perfect match.
+For Triton: `0xD2D86467` LE for Triton/IBEX, `0x2E795631` LE for Proteus. Extracted from `hardwareupdater.py` as constants, then validated against the 4 local .fw files: perfect match.
 
 See also: [FIRMWARE_PROTOCOL.md](FIRMWARE_PROTOCOL.md) for the full header layout.
 
@@ -74,7 +74,7 @@ When a vendor tool is a single Python executable (8-100 MB), check if it's a **P
 2. If present: parse the TOC → contains all Python modules uncompiled
 3. Modules are stored as **marshalled code objects** (no .pyc magic header)
 4. Load directly with `marshal.loads(open(f).read())`
-5. `dis.dis()` for bytecode disassembly — no external decompiler needed
+5. `dis.dis()` for bytecode disassembly (no external decompiler needed)
 
 Reusable script for this: `tools/extract_pyinst.py`.
 
@@ -113,7 +113,7 @@ Corollary: If a hidraw tool gives "Permission denied" with sudo, **try without s
 
 Initial assumption: "Steam blocks all HID interfaces of the puck exclusively". Reality: Steam is running, and we can still read `/dev/hidraw9` as the `deck` user. Steam and our tools coexist without problems.
 
-(Lizard-mode reports only appear when Steam is dead — see [HID_REPORT_FORMAT.md](HID_REPORT_FORMAT.md).)
+(Lizard-mode reports only appear when Steam is dead; see [HID_REPORT_FORMAT.md](HID_REPORT_FORMAT.md).)
 
 ### Live Feature-Reports work with Linux ioctl directly
 
@@ -128,7 +128,7 @@ Use with `os.open(O_RDWR)` and `fcntl.ioctl` directly. Buffer format: first byte
 
 For a wireless dongle: the same HID path is often a **bidirectional multiplexer** between local dongle firmware and the wireless-attached device. For Triton/Proteus:
 - `fr_id=2` with `op=0x83` → response from the puck itself (local)
-- `fr_id=1` with `op=0x83` → response from the controller (routed via ESB) — same opcode, `fr_id` selects the target
+- `fr_id=1` with `op=0x83` → response from the controller (routed via ESB). Same opcode, `fr_id` selects the target
 
 → Collect ALL fr_id/op combinations via brute-force (0x80..0xCF, both fr_ids). What comes back tells you which channels exist.
 
@@ -151,9 +151,9 @@ All reusable for other vendor-specific HID devices.
 1. ❌ Auto-countdown mapper started in the background → user saw nothing → broken data
 2. ❌ "Sticks only go to ±700" documented prematurely based on an inactive capture
 3. ❌ "InHand flag" identified as capacitive sensor without checking the stick value range
-4. ❌ `pkill -f "steam.sh|..."` executed — pkill matched its own shell command line and killed the controlling bash
-5. ❌ `sudo` tried for hidraw access — worse than without sudo due to SteamOS ACLs
-6. ❌ A 24-byte "Per-Device-Constant" identified as calibration — was actually the IMU+Quat block in OFF mode
-7. ❌ Claimed nRF52840, "correcting" the teardowns, from the `gpio1`/`i2s` Device-Tree nodes — but those peripherals exist on the nRF52833 too. A *present* peripheral only proves a family lower-bound; the *absent* high-end ones (QSPI, CryptoCell) plus flash/RAM size identify the part. The teardowns (nRF52833) were right; confirmed later by the `mwdmwd/sc26re` firmware, which targets nRF52833.
+4. ❌ `pkill -f "steam.sh|..."` executed: pkill matched its own shell command line and killed the controlling bash
+5. ❌ `sudo` tried for hidraw access: worse than without sudo due to SteamOS ACLs
+6. ❌ A 24-byte "Per-Device-Constant" identified as calibration was actually the IMU+Quat block in OFF mode
+7. ❌ Claimed nRF52840, "correcting" the teardowns, from the `gpio1`/`i2s` Device-Tree nodes, but those peripherals exist on the nRF52833 too. A *present* peripheral only proves a family lower-bound; the *absent* high-end ones (QSPI, CryptoCell) plus flash/RAM size identify the part. The teardowns (nRF52833) were right; confirmed later by the `mwdmwd/sc26re` firmware, which targets nRF52833.
 
 Each of these mistakes is a concrete lesson. Worth re-reading before starting a similar project.
