@@ -56,7 +56,7 @@ Workflow: **PREP → UPDATE → REBOOT**.
 | **Triton** | The controller (SC2 itself), also called IBEX in firmware filenames | Datamined Q4 2025 ([NeoGAF](https://www.neogaf.com/threads/new-triton-steam-controller-icon-datamined.1689607/), [FRVR](https://frvr.com/blog/steam-controller-2-may-be-coming-soon-as-dataminers-discover-new-triton-codename-in-steam-update/)); also visible in SDL3 source as `SDL_hidapi_steam_triton.c` (covered by [Phoronix Nov 12 2025](https://www.phoronix.com/news/New-Steam-Controller-SDL)) |
 | **Ibex** | Hardware-side codename for the SC2 (sibling to `Roy` for the Steam Frame controllers) | Datamined Nov 2024 by [Brad Lynch on X](https://x.com/SadlyItsBradley/status/1858925211363553316); also [Tom's Hardware](https://www.tomshardware.com/video-games/pc-gaming/valve-seemingly-preps-steam-controller-2-and-vr-controller-ibex-and-roy-controller-renders-spotted-in-steamvr-data-mine) |
 | **Proteus** | The puck/dongle | SDL3 source (`IsProteusDongle()` function in `SDL_hidapi_steam_triton.c`); also explicitly named by [Phoronix Nov 12 2025](https://www.phoronix.com/news/New-Steam-Controller-SDL). This document adds the device-type role (`Proteus_USB = 5`, `Proteus_BL = 1`) from `hardwareupdater.py` |
-| **Nereid** | **A second SC2 dongle parallel to Proteus.** SDL3 `controller_list.h` labels USB `28DE:1305` as "Valve Steam Nereid Dongle (Proprietary)" with the same `k_eControllerType_SteamControllerTriton` driver assignment as Proteus; the driver's `IsProteusDongle()` returns true for both, i.e., they share the exact same wire protocol. `hardwareupdater.py` defines `Nereid_USB = 6` in `EDeviceType` but **no `Nereid_BL`**, suggesting Steam's standalone updater doesn't yet have a bootloader path for it.<br><br>**Strongest current hypothesis** (not confirmed): Nereid is the **Steam-Machine-integrated dongle**. Evidence: (a) SDL3 added the Nereid PID on Nov 12 2025, the same week Steam Machine was announced; (b) Steam Machine is officially "a PC console under SteamOS" and will ship as a self-contained bundle: an integrated dongle (USB-internal, not a separate puck the user plugs in) would explain a parallel PID; (c) no Nereid_BL in the user-facing updater is consistent with the Steam Machine's OS handling its own integrated peripherals directly rather than via Steam-Client; (d) reusing the Proteus protocol means controllers and games work identically across Machine + standalone Puck setups. Steam Machine has been delayed (no release date as of May 2026 due to RAM shortage), which fits "PID defined ahead of launch, no public hardware yet." Alternatives: hardware-revision 2 of the Puck, region-specific SKU, OEM-licensed dongle. None as strong a fit as Steam-Machine-integrated. | SDL3 commit `1998b650452bdf0bee5209e20e4715b4295abe8c` (Sam Lantinga, Nov 12 2025); also mentioned by [Phoronix](https://www.phoronix.com/news/New-Steam-Controller-SDL) the same day |
+| **Nereid** | **The Steam controller receiver built into the Steam Machine** SDL3 `controller_list.h` labels USB `28DE:1305` as "Valve Steam Nereid Dongle (Proprietary)" with the same `k_eControllerType_SteamControllerTriton` driver assignment as Proteus; the driver's `IsProteusDongle()` returns true for both, i.e., they share the exact same wire protocol. `hardwareupdater.py` defines `Nereid_USB = 6` in `EDeviceType` but **no `Nereid_BL`**, suggesting Steam's standalone updater doesn't yet have a bootloader path for it. | SDL3 commit `1998b650452bdf0bee5209e20e4715b4295abe8c` (Sam Lantinga, Nov 12 2025); also mentioned by [Phoronix](https://www.phoronix.com/news/New-Steam-Controller-SDL) the same day |
 | **Olympus** | Custom/relabeled trackpad IC at I2C `0x2C` (drivers `olympus-trackpad-left`, `olympus-trackpad-right`) | **First publicly documented here**: extracted from IBEX_FW rodata Device-Tree nodes |
 | **Dragoon** | Valve-internal HAL/scheduling library (path `dragoon/libs/scheduling/src/rem_hal_event_timer.c` leaked in IBEX_FW build paths) | **First publicly documented here** |
 | **Roy** | Found in IBEX_FW as a thread/module name `roybex_combiner`. "Roy" is the public datamined codename for the Steam Frame VR controllers (per Tom's Hardware Q4 2025). A "Roy-Ibex combiner" thread in Triton firmware **suggests an input-bridge between Roy controllers and the SC2** (hypothesis, not confirmed) | "Roy" itself is publicly datamined (Tom's Hardware Q4 2025); the integration evidence in Triton firmware is **first publicly documented here** |
@@ -71,13 +71,13 @@ Workflow: **PREP → UPDATE → REBOOT**.
 | `28DE:1302` | Triton (Controller) | Wired-USB, Normal Mode (HID), labelled `Valve Steam Triton Controller` in SDL3 `controller_list.h` |
 | `28DE:1303` | Triton (Controller) | **Bluetooth LE mode**, labelled `Valve Steam Triton Controller (BLE)` in SDL3 `controller_list.h`; appears in `hardwareupdater.py` `find_units_for_update` (BLE-paired controllers can be enumerated for updates) but not in `find_attached_device_by_serial_number` (BLE devices can't be opened via the same hidapi path as USB/Puck) |
 | `28DE:1304` | Proteus (Puck) | Normal Mode (HID): `Valve Steam Proteus Dongle (Proprietary)` |
-| `28DE:1305` | **Nereid (separate Dongle)** | Normal Mode (HID): `Valve Steam Nereid Dongle (Proprietary)` in SDL3 `controller_list.h`. SDL3's `IsProteusDongle()` returns true for both `0x1304` and `0x1305`, so this is a structurally parallel second SC2 dongle (role uncertain, possibly a future / SKU variant; see Codenames table) |
+| `28DE:1305` | **Nereid (Puck)** | Normal Mode (HID): `Valve Steam Nereid Dongle (Proprietary)` in SDL3 `controller_list.h`. SDL3's `IsProteusDongle()` returns true for both `0x1304` and `0x1305`. This is the controller receiver that's built into the Steam Machine |
 | `28DE:1005` | Triton (Controller) | Bootloader Mode (CDC ACM), **first publicly documented here** |
-| `28DE:1007` | Proteus (Puck) | Bootloader Mode (CDC ACM), **first publicly documented here** |
+| `28DE:1007` | Proteus and Nereid (Puck) | Bootloader Mode (CDC ACM), **first publicly documented here** |
 
 Steam-side scan: VID=0x28DE, Usage-Page=0xFF00 (vendor-specific HID).
 
-**Public PIDs** `0x1302`, `0x1303`, `0x1304`, **and `0x1305`** are all in SDL3 commit [1998b6504](https://github.com/libsdl-org/SDL/commit/1998b650452bdf0bee5209e20e4715b4295abe8c) by Sam Lantinga (Valve), Nov 12 2025. **Bootloader-side CDC ACM PIDs** `0x1005` and `0x1007` are not in SDL3 (grepped against current `main`); no Nereid-bootloader PID has been observed in `hardwareupdater.py` either (the `EDeviceType` enum we extracted lists `Nereid_USB = 6` but no `Nereid_BL`).
+**Public PIDs** `0x1302`, `0x1303`, `0x1304`, **and `0x1305`** are all in SDL3 commit [1998b6504](https://github.com/libsdl-org/SDL/commit/1998b650452bdf0bee5209e20e4715b4295abe8c) by Sam Lantinga (Valve), Nov 12 2025. **Bootloader-side CDC ACM PIDs** `0x1005` and `0x1007` are not in SDL3 (grepped against current `main`). The Nereid dongle boots into the same Bootloader PID as Proteus.
 
 ## Device-Type Enum
 
@@ -89,7 +89,7 @@ enum EDeviceType {
     k_EDeviceType_Triton_BLE = 3,  // Controller via Bluetooth
     k_EDeviceType_Triton_ESB = 4,  // Controller via puck (ESB radio)
     k_EDeviceType_Proteus_USB= 5,  // Puck via USB
-    k_EDeviceType_Nereid_USB = 6,  // second SC2 dongle (PID 0x1305 in SDL3, parallel to Proteus) — see Codenames table
+    k_EDeviceType_Nereid_USB = 6,  // Steam Machine internal puck
 };
 
 enum EDeviceClass {
@@ -229,11 +229,11 @@ Before the frame protocol on serial can start, the device must be put in bootloa
 
 | Device | Condition | Feature-Report payload | Meaning |
 |---|---|---|---|
-| Proteus (Puck) | `bcd_version == 2` | `pad_hid_fr(b'\x02\x90')` | Feature-Report-ID 0x02, Setting `0x90` = Reboot-to-BL |
-| Proteus (Puck) | `bcd_version != 2` | `pad_hid_fr(b'\x01\x90')` | Feature-Report-ID 0x01, Setting `0x90` |
+| Proteus or Nereid (Puck) | `bcd_version == 2` | `pad_hid_fr(b'\x02\x90')` | Feature-Report-ID 0x02, Setting `0x90` = Reboot-to-BL |
+| Proteus or Nereid (Puck) | `bcd_version != 2` | `pad_hid_fr(b'\x01\x90')` | Feature-Report-ID 0x01, Setting `0x90` |
 | Triton (Controller) | (always) | `pad_hid_fr(b'\x01\x90')` | Feature-Report-ID 0x01, Setting `0x90` |
 
-Our puck has `bcdDevice 0.02` → we land on the **bcd_version == 2** path (Feature-Report 0x02).
+Our puck has `bcdDevice 0.02` → we land on the **bcd_version == 2** path (Feature-Report 0x02). The Steam Machine also has the same BCD version. Maybe the other code path is for earlier prototypes?
 
 Normal reboot (Triton only, from `reboot()`):
 - `pad_hid_fr(b'\x01\x95')`: Feature-Report-ID 0x01, Setting `0x95` = Normal Reboot
@@ -718,13 +718,13 @@ The controller exposes a button-combination ("keychord") for switching wireless 
 | State | Wireless mode |
 |---|---|
 | `ST_PUCK_KEYCHORD_BT_entry` | Bluetooth LE |
-| `ST_PUCK_KEYCHORD_ESB_entry` | Standard Proteus puck (ESB) |
-| `ST_PUCK_KEYCHORD_ESB_ALT_entry` | **Alternative ESB**. Hypothesis: the Nereid pairing path |
+| `ST_PUCK_KEYCHORD_ESB_entry` | Standard ESB Puck |
+| `ST_PUCK_KEYCHORD_ESB_ALT_entry` | **Alternative ESB**. Hypothesis: Standard ESB Puck, Slot 2 |
 | `ST_PUCK_KEYCHORD_CURRENT_entry` | Re-use last-selected mode |
 
 Same set exists with `ST_BATTERY_*_entry` prefix (parallel states while on battery, i.e. wireless).
 
-The `ESB_ALT` state is **independent evidence** that Triton firmware was designed from the start to support two distinct ESB dongles, consistent with SDL3's `IsProteusDongle()` returning true for both Proteus (`0x1304`) and Nereid (`0x1305`) PIDs.
+The `ESB_ALT` state is **independent evidence** that Triton firmware was designed from the start to support two distinct ESB dongles.
 
 ### Power / USB state machine
 
@@ -832,7 +832,7 @@ Each of the 4 ESB slots tracks its own state with per-slot log strings:
 
 Bond storage paths in the Zephyr settings subsystem:
 - `esb/bond`: primary bond (slot's main pairing)
-- `esb/bond_2`: **secondary bond** (matches the GamersNexus-reported "controller remembers 2 puck pairings" spec)
+- `esb/bond_2`: secondary bond
 - `bonds`: bond list
 - `bt/keys`: Bluetooth key storage
 

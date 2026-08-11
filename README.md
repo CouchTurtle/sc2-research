@@ -6,7 +6,7 @@ Notes and tools for the Steam Controller 2 (Triton): HID input layout, firmware 
 
 Most of this comes from extracting `hardwareupdater.x86_64` (the PyInstaller bundle that ships with the Steam client) and verifying against an actual SC2 + Puck on a Steam Deck (SteamOS) with controller firmware `bcdDevice 0.02`. Hobby project with heavy AI assistance (see [Disclaimer](#disclaimer)).
 
-Covers: SC2 (USB `28DE:1302/1303`), the Proteus puck (`28DE:1304`), and the parallel Nereid dongle (`28DE:1305`). Nereid is plausibly the Steam-Machine-integrated dongle, based on SDL3 commit timing and the absence of a Nereid bootloader path in Steam's user-facing updater.
+Covers: SC2 (USB `28DE:1302/1303`), the Proteus puck (`28DE:1304`), and the parallel Nereid dongle (`28DE:1305`, integrated Steam Machine dongle). 
 
 ## Documentation
 
