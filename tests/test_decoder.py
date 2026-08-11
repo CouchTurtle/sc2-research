@@ -193,6 +193,28 @@ class DiffUnknownTest(unittest.TestCase):
         self.assertEqual(old, 0)
         self.assertEqual(new, 1)
 
+    def test_diff_unknown_tolerates_different_lengths(self):
+        a = bytearray(STATE_REPORT_SIZE)
+        a[0] = 0x42
+        self.assertEqual(diff_unknown(bytes(a[:8]), bytes(a)), [])
+
+
+class TestDegenerateInput(unittest.TestCase):
+    """Regressions for inputs that used to raise the wrong exception or return nothing."""
+
+    def test_empty_report_raises_valueerror_not_indexerror(self):
+        with self.assertRaises(ValueError):
+            decode_state(b"")
+
+    def test_iter_reports_accepts_bytes(self):
+        """The bytes branch used to yield nothing: `return` inside a generator."""
+        path = str(CAPTURES / "sample_idle.bin")
+        from_path = list(iter_reports(path))
+        with open(path, "rb") as fh:
+            from_bytes = list(iter_reports(fh.read()))
+        self.assertEqual(from_bytes, from_path)
+        self.assertTrue(from_bytes)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

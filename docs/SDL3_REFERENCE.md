@@ -56,7 +56,7 @@ typedef enum
 
 **Implication for SteamHapticsSinger:** their "Note-On" (0x83) is the public `HAPTIC_LFO_TONE` (continuous-tone generator at a given frequency), and "Note-Off" (0x81) is `HAPTIC_PULSE`. Functional naming for a MIDI-player use case, but canonically these are the LFO-tone and pulse haptic-message types. Their `byte[1] = actuator_id` corresponds to the `side` field in the struct (per controller_structs.h: `0x01 = L, 0x02 = R, 0x03 = Both`, though SteamHapticsSinger's empirical IDs 0/1/3/4 suggest the Triton firmware uses `side` as a per-actuator index, not L/R/Both).
 
-Full message structs at `controller_structs.h:163-223`. The most powerful is `MsgHapticLfoTone` (10 bytes payload + report ID):
+Full message structs at `controller_structs.h:163-223`. The most powerful is `MsgHapticLfoTone` (9 bytes payload, 10 with the report ID):
 
 ```c
 typedef struct {
@@ -294,7 +294,7 @@ Still genuinely first-publicly-documented in this project (cross-checked against
 - The `EDeviceType` enum with 7 entries (Triton_BL/USB/BLE/ESB, Proteus_BL/USB, Nereid_USB), semantic mapping from `hardwareupdater.py`
 - Live-feature-report routing (`fr_id=2, op=0x83` for puck, `fr_id=1, op=0x83` for controller via ESB: `fr_id` selects the target), a wrapper around the public `ID_GET_ATTRIBUTES_VALUES` opcode, but the multi-device routing pattern wasn't documented
 - 31-tag Triton-specific attribute taxonomy (the shared `ControllerAttributes` enum only has ~13 entries: our additional tags are Triton-only)
-- Firmware-string analysis: MP2733 charger, fuel-gauge IC, RGBW LEDs, Zephyr RTOS markers, ARM GCC 14 toolchain
+- Firmware-string analysis: MP2733 charger, RGBW LEDs, Zephyr RTOS markers, ARM GCC 14 toolchain
 - ESB `esb-controller@0..3` slot strings as proof of the 4-slot architecture
 - The unobserved `0x7b` (13 B) report: not in SDL3's enum, ~2 Hz, likely Proteus-side puck status
 - Frame-rate refinement to ~266 Hz via the `frame_rate=11` attribute query (vs. SDL3's commented "~4 ms" approximation)

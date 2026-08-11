@@ -32,8 +32,11 @@ INPUT_REPORT_SIZES: dict[int, int] = {
     0x43: 15,   # Battery status (TritonBatteryStatus_t per SDL3; ~0.4 Hz)
     0x44: 6,    # Audio-buffer feedback (haptic-stream flow control); not observed in idle
     0x45: 46,   # Controller state, no-quaternion (ID_TRITON_CONTROLLER_STATE_BLE) — BLE/other transport
+    0x46: 2,    # ID_TRITON_WIRELESS_STATUS_X (SDL3 variant of 0x79); never observed here
+    0x47: 46,   # ID_TRITON_CONTROLLER_STATE_TIMESTAMP (TritonMTUNoQuat32TS_t: 45 B payload
+                # + report ID). Added to SDL3 in 2026; never observed on our fw 0.02.
     0x79: 2,    # Wireless status: 1-byte connect state, edge-triggered; not observed in idle
-    0x7b: 13,   # Puck wireless/link status (~2 Hz; byte 8 = RSSI dBm)
+    0x7b: 13,   # Puck wireless/link status (~2 Hz; raw offset 9 = RSSI dBm)
 }
 
 STATE_REPORT_ID = 0x42
@@ -116,7 +119,8 @@ class ControllerFrame:
 
 def decode_state(report: bytes) -> ControllerFrame:
     if len(report) != STATE_REPORT_SIZE or report[0] != STATE_REPORT_ID:
-        raise ValueError(f"not a 0x42 state report: id=0x{report[0]:02x} len={len(report)}")
+        got = f"0x{report[0]:02x}" if report else "none (empty)"
+        raise ValueError(f"not a 0x42 state report: id={got} len={len(report)}")
     buttons = {name: bool(report[byte] & (1 << bit))
                for name, (byte, bit) in KNOWN_BUTTON_BITS.items()}
     # Use the SDL-spec gyro position for the imu tuple. IMU stays OFF
@@ -143,8 +147,12 @@ def iter_reports(stream) -> Iterator[bytes]:
     if isinstance(stream, str):
         f = open(stream, "rb")
         owns = True
-    elif isinstance(stream, bytes):
-        return _iter_from_buffer(stream)
+    elif isinstance(stream, (bytes, bytearray, memoryview)):
+        # `yield from`, not `return`: this function is a generator, so a bare
+        # return would end it without ever delegating (it silently yielded
+        # nothing for bytes input).
+        yield from _iter_from_buffer(bytes(stream))
+        return
     else:
         f = stream
         owns = False
@@ -223,7 +231,7 @@ def diff_unknown(prev: bytes, curr: bytes) -> list[tuple[int, int, int, int]]:
     `TritonButtons` enum.
     """
     out: list[tuple[int, int, int, int]] = []
-    for i in range(len(curr)):
+    for i in range(min(len(prev), len(curr))):
         if i in _NOISE_BYTES or 0x1e <= i <= 0x35:
             continue
         if prev[i] == curr[i]:

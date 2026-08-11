@@ -48,6 +48,7 @@ report descriptor (372 bytes) defines the following:
 | `0x44`    | Input     | 6 B             | In descriptor; never observed; not in SDL3 enum |
 | `0x45`    | Input     | 46 B            | `ID_TRITON_CONTROLLER_STATE_BLE` per SDL3: state report routed via Bluetooth LE; never seen in our Puck-only captures |
 | `0x46`    | Input     | 2 B             | `ID_TRITON_WIRELESS_STATUS_X` per SDL3 (variant); never observed |
+| `0x47`    | Input     | 46 B            | `ID_TRITON_CONTROLLER_STATE_TIMESTAMP` per SDL3 (`TritonMTUNoQuat32TS_t`: adds a trackpad-sampling timestamp and shrinks the IMU timestamp to 16 bit, so it stays the same size as `0x45`). Added to SDL3 in 2026, after our firmware baseline; never observed on `bcdDevice 0.02`. |
 | `0x79`    | Input     | 2 B             | `ID_TRITON_WIRELESS_STATUS` per SDL3: 1-byte connection state (`0x02`=connected / `0x01`=disconnected), **edge-triggered** (per [openpuck](https://github.com/safijari/openpuck)); not seen in steady state because it only fires on connect/disconnect |
 | `0x7b`    | Input     | 13 B            | **Not in SDL3's enum**: observed at ~2 Hz, likely a Proteus-side puck status report (link quality / paired-slot status); contents are our genuine novel-find. See section below. |
 | `0x80..0x89` | Output | 3–63 B          | Haptic + audio-stream output. `0x80`–`0x85` (Rumble / Pulse / Command / LFO_Tone / Log_Sweep / Script) are in SDL3's `ValveTritonOutReportMessageIDs`; `0x86`–`0x89` (audio-stream configure + push data, **not in SDL3**) drive PCM/u-law playback through the actuators. Full layouts in [`HAPTICS.md`](HAPTICS.md). |
@@ -127,26 +128,38 @@ Across 180+ seconds of monitoring including a full Steam-stop cycle and idle: **
 
 ## Report `0x7b`: puck-side status (13 bytes, ~2 Hz)
 
-**Not present in SDL3's `ETritonReportIDTypes` enum.** SDL3 only knows 0x42, 0x43, 0x45, 0x46, 0x79. So `0x7b` is genuinely undocumented by Valve in the open-source code. Our hypothesis: it's a Proteus-side status report (link statistics / pairing slot info) that the puck firmware emits but SDL3 doesn't consume because it isn't needed for the controller-as-joystick abstraction.
+**Not present in SDL3's `ETritonReportIDTypes` enum.** SDL3 knows 0x42, 0x43, 0x45, 0x46, 0x47 and 0x79 (0x47 = `ID_TRITON_CONTROLLER_STATE_TIMESTAMP`, added in 2026). So `0x7b` is genuinely undocumented by Valve in the open-source code. Our hypothesis: it's a Proteus-side status report (link statistics / pairing slot info) that the puck firmware emits but SDL3 doesn't consume because it isn't needed for the controller-as-joystick abstraction.
 
 (Earlier drafts of this doc labelled `0x7b` as the battery report. That was wrong; battery is `0x43` per SDL3.)
 
-Tentative byte interpretation based on 30+ samples across multiple captures:
+Tentative byte interpretation. Offsets are **raw report offsets**, so `0x00` is
+the Report ID itself and the 12-byte payload starts at `0x01`. Reference frames
+straight out of `captures/sample_idle.bin` and `captures/sample_steam_press.bin`:
+
+```text
+7b f6 01 85 00 00 00 03 00 c2 00 4e ff    (idle)
+7b f6 01 85 00 01 00 05 00 c6 00 3c ff    (steam press)
+```
 
 | offset | sample values             | likely meaning                          |
 |--------|---------------------------|-----------------------------------------|
 | `0x00` | `7b`                      | Report ID                               |
 | `0x01` | `f5..f9`                  | rolling counter or noise                |
-| `0x02` | `85` or `86`              | status flag                             |
-| `0x03` | `00`                      | constant                                |
-| `0x04` | `00..01`                  | sparse 1-bit indicator                  |
-| `0x05` | `00`                      | constant                                |
-| `0x06` | `03..05`                  | small counter                           |
-| `0x07` | `00`                      | constant                                |
-| `0x08` | `ba..c8`                  | **signal strength (RSSI), signed dBm**: e.g. `0xc2` = −62 dBm. Per [openpuck](https://github.com/safijari/openpuck), byte 8 of `0x7b` is the controller→puck RSSI. (An earlier draft guessed "battery/voltage" here; battery is `0x43`.) |
-| `0x09` | `00`                      | constant                                |
-| `0x0a` | `3c, 4c, 4e`              | **varies per session**: RSSI / link quality candidate |
-| `0x0b` | `ff`                      | constant `0xff`                         |
+| `0x02` | `01`                      | constant `0x01`                         |
+| `0x03` | `85` or `86`              | status flag                             |
+| `0x04` | `00`                      | constant                                |
+| `0x05` | `00..01`                  | sparse 1-bit indicator                  |
+| `0x06` | `00`                      | constant                                |
+| `0x07` | `03..05`                  | small counter                           |
+| `0x08` | `00`                      | constant                                |
+| `0x09` | `ba..c8`                  | **signal strength (RSSI), signed dBm**: e.g. `0xc2` = −62 dBm. Per [openpuck](https://github.com/safijari/openpuck) this is byte 8 **of the payload**, which is raw offset `0x09` once the Report ID is counted. (An earlier draft guessed "battery/voltage" here; battery is `0x43`.) |
+| `0x0a` | `00`                      | constant                                |
+| `0x0b` | `3c, 4c, 4e`              | **varies per session**: link-quality candidate |
+| `0x0c` | `ff`                      | constant `0xff`                         |
+
+(An earlier version of this table missed the constant `0x01` at offset `0x02`.
+Everything after it was off by one, so RSSI was listed at `0x08` and the
+trailing `0xff` fell off the end. Corrected against the checked-in captures.)
 
 ## Report `0x43`: battery status (15 bytes, ~0.4 Hz)
 
@@ -165,7 +178,7 @@ typedef struct {
 } TritonBatteryStatus_t;  // 14 bytes payload + 1 report-ID byte = 15 bytes total
 ```
 
-Our 30+ samples show the 5-byte tail (`0x09..0x0e`) varying between captures: that's `sCurrent`, `sInputCurrent`, and `sTemperature`, which makes sense (the controller's load varies). Earlier drafts labelled this as "telemetry, not yet parsed". The SDL3 reference resolves it. To map byte offsets to fields:
+Our 30+ samples show the 6-byte tail (`0x09..0x0e`) varying between captures: that's `sCurrent`, `sInputCurrent`, and `sTemperature`, which makes sense (the controller's load varies). Earlier drafts labelled this as "telemetry, not yet parsed". The SDL3 reference resolves it. To map byte offsets to fields:
 
 | offset (incl. ID) | size | field |
 |---|---|---|

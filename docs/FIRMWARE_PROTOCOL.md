@@ -629,15 +629,15 @@ DT-node analysis of IBEX_FW reveals the complete I2C bus map:
 |---|---|---|---|
 | `0x10` | `slg4l48185@10` | **Renesas/Dialog SLG4L48185** | GreenPAK programmable mixed-signal IC. Driver `gpio_greenpak` uses it as an I2C-controlled GPIO expander (likely for power-sequencing or puck-pairing pin debouncing). |
 | `0x2C` | `olympus@2c` | **Olympus** (Valve-internal codename, likely custom or relabeled silicon) | Trackpad controller for both left + right trackpads (drivers `olympus-trackpad-left`, `olympus-trackpad-right`). |
-| `0x4B` | `mp2733@4b` | **MPS MP2733** | USB-PD-capable battery charger + fuel-gauge combo, BC1.2-compliant. Confirms the `"MP2733"` and `"BC1.2 result callback"` strings we found earlier; the `"Fuel gauge device is not ready"` string is from this chip's init code (the MP2733 has a built-in fuel-gauge: no separate IC). |
-| `0x6A` | `lsm6dsv16x@6a` | **ST LSM6DSV16X** | 6-axis IMU (3D gyro + 3D accelerometer) with embedded **Smart Fusion Engine** that outputs quaternions directly. Released by ST in 2024. Exact part number leaked in the error string `"Failed to set LSM6D's moutning matrix"` (sic: typo from Valve's firmware author). This chip is what fills the `sGyroQuatW/X/Y/Z` fields in `TritonMTUFull_t.imu`. The SDL3 comment "the controller can do its own sensor fusion" refers to this on-chip engine, not firmware-side code. |
+| `0x4B` | `mp2733@4b` | **MPS MP2733** | Battery charger with NVDC power path and on-chip ADC, BC1.2-compliant. Confirms the `"MP2733"` and `"BC1.2 result callback"` strings we found earlier. The `"Fuel gauge device is not ready"` string comes from the firmware's fuel-gauge abstraction over this charger, not from a dedicated gauge IC: `mwdmwd/sc26re` estimates state-of-charge in software from the measured battery voltage. |
+| `0x6A` | `lsm6dsv16x@6a` | **ST LSM6DSV16X** | 6-axis IMU (3D gyro + 3D accelerometer) with embedded **Smart Fusion Engine** that outputs quaternions directly. Announced by ST in November 2022. Exact part number leaked in the error string `"Failed to set LSM6D's moutning matrix"` (sic: typo from Valve's firmware author). This chip is what fills the `sGyroQuatW/X/Y/Z` fields in `TritonMTUFull_t.imu`. The SDL3 comment "the controller can do its own sensor fusion" refers to this on-chip engine, not firmware-side code. |
 
 ### Other hardware components identified from string analysis
 
 | String found | Component |
 |---|---|
 | `"cal/rgbw_w"`, `"cal/rgbw_b/g/r"` | RGBW LEDs with per-channel calibration (status indicator?). SDL3 doesn't expose LED control, but the firmware has it. See `ID_SET_LED_COLOR` in the Operation IDs section below. |
-| `"grip touch threshold failed to retrieve"` | Grip-touch sensors (the LSM6DSV16X has touch-sense capability. These are the Grip Sense capacitive bits in the buttons mask: `0x10000000` / `0x20000000`) |
+| `"grip touch threshold failed to retrieve"` | Grip-touch sensors. These are the Grip Sense bits in the buttons mask (`0x10000000` / `0x20000000`). The threshold comes from the **Olympus trackpad path, not the IMU**: `mwdmwd/sc26re`'s [`olympus.c`](https://github.com/mwdmwd/sc26re/blob/master/app/src/olympus.c) reads `IBEX_SETTING_OLYMPUS_GRIP_TOUCH_PERCENT` in `grip_touch_threshold()` and derives both grip buttons from Olympus grip-sense values. (An earlier version of this doc credited the LSM6DSV16X's touch-sense capability. That was a guess from the datasheet; the open firmware says otherwise.) |
 | `"PILOT_SENSE input"`, `"puck-pilot-gpio"` | Pilot-line GPIOs for puck-docking detection (signal that the controller is mounted on the magnetic Puck) |
 
 ### Proteus-side hardware (Puck)
@@ -778,8 +778,8 @@ Notes on the more interesting ones:
 | `ID_GET_BATTERY_DATA` | Battery voltage / current / temperature query |
 | **`ID_GET_LED_COLOR` / `ID_SET_LED_COLOR`** | **Firmware-level LED control.** Discovered here via the IBEX_FW `ID_*` format strings; Valve subsequently exposed LED dimming in the Steam Settings UI as part of the June 2026 firmware-update release (per [GamingOnLinux coverage](https://www.gamingonlinux.com/2026/06/latest-steam-update-brings-steam-controller-firmware-updates-and-bug-fixes/)), confirming the path. SDL3 itself still returns `SDL_Unsupported()` for `SetJoystickLED`. |
 | `ID_GET_USER_STORE` | Per-user persistent data storage |
-| `ID_FIRMWARE_UPDATE_REBOOT` | Reboot to enter firmware update (the `Setting 0x90` path) |
-| **`ID_REBOOT_INTO_ISP`** | **Alternative bootloader-switch path**: In-System Programming reboot. A second route into the bootloader, distinct from the `Setting 0x90` Feature-Report we documented in the "Update Wire Protocol" section. |
+| `ID_FIRMWARE_UPDATE_REBOOT` | Reboot to enter firmware update: **opcode `0x95`** |
+| **`ID_REBOOT_INTO_ISP`** | In-System Programming reboot: **opcode `0x90`**, the reboot-to-bootloader Feature-Report used in the "Update Wire Protocol" section above. Both of these are opcodes (second byte of the report), not settings. An earlier version of this doc called `0x90` a "setting" and treated the two as unrelated paths. |
 | `ID_TURN_OFF` | Power-down |
 
 ## Settings subsystem (Zephyr `settings/` paths)

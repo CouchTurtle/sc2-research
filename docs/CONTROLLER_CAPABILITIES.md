@@ -18,8 +18,8 @@ Both firmwares built with **ARM GCC 14 + newlib** on Jenkins CI, running **Zephy
 |---|---|---|
 | `0x10` | **Renesas/Dialog SLG4L48185** GreenPAK | Programmable mixed-signal IC, used as I2C-controlled GPIO expander (driver `gpio_greenpak`) |
 | `0x2C` | **Olympus** (Valve-internal codename) | Capacitive trackpad controller for both pads. `mwdmwd/sc26re` models it as a 32-bit register-mapped capacitive touch IC (vendor `0x0488`, product `0xd0c1`), likely a custom or relabeled part. |
-| `0x4B` | **MPS MP2733** | USB-PD-capable battery charger with **integrated fuel-gauge**, BC1.2-compliant. `mwdmwd`'s `battery.c` reads state-of-charge directly from the MP2733's registers. There is no separate fuel-gauge IC. |
-| `0x6A` | **ST LSM6DSV16X** | 6-axis IMU (gyro + accel) with **on-chip Smart Fusion Engine** producing quaternions. Released by ST in 2024. This chip is what fills the `sGyroQuat*` fields in `TritonMTUFull_t.imu`. The SDL3 driver doesn't compute the quaternions in software, it just reads them from the chip. |
+| `0x4B` | **MPS MP2733** | Battery charger with NVDC power path and on-chip ADC, BC1.2-compliant. Not a fuel gauge: `mwdmwd`'s [`battery.c`](https://github.com/mwdmwd/sc26re/blob/master/app/src/battery.c) measures battery voltage and maps it to a percentage through its own charge/discharge curves (`mp2733_charge_curve[]` / `mp2733_discharge_curve[]`). No coulomb counter, and no separate gauge IC on the bus. |
+| `0x6A` | **ST LSM6DSV16X** | 6-axis IMU (gyro + accel) with **on-chip Smart Fusion Engine** producing quaternions. Announced by ST in November 2022. This chip is what fills the `sGyroQuat*` fields in `TritonMTUFull_t.imu`. The SDL3 driver doesn't compute the quaternions in software, it just reads them from the chip. |
 
 Proteus (puck) has a much simpler I2C bus: only a single `ec-button-interface@50` at address `0x50` (small Embedded Controller for puck button readout). No IMU, no battery charger, no trackpads on the puck side.
 
@@ -53,11 +53,11 @@ Found in IBEX_FW / PROTEUS_FW rodata via `tools/analyze_fw.py` (see `FIRMWARE_PR
 
 | String | Component |
 |---|---|
-| `"MP2733"` | MPS MP2733 USB-PD battery charger IC |
+| `"MP2733"` | MPS MP2733 battery-charger IC |
 | `"BC1.2 result callback"` | USB Battery Charging Spec 1.2 capable |
-| `"Fuel gauge device is not ready"` | The MP2733's **integrated** fuel-gauge (not a separate IC; see I2C table above) |
+| `"Fuel gauge device is not ready"` | From the firmware's fuel-gauge layer, not from a gauge IC. The MP2733 is a charger; `mwdmwd/sc26re` derives the percentage from battery voltage (see I2C table above) |
 | `"cal/rgbw_w"`, `"cal/rgbw_b/g/r"` | RGBW LEDs with per-channel calibration |
-| `"grip touch threshold failed to retrieve"` | Capacitive grip sensors (corresponds to HID bits `0x10000000` / `0x20000000` in the buttons field) |
+| `"grip touch threshold failed to retrieve"` | Capacitive grip sensors (HID bits `0x10000000` / `0x20000000` in the buttons field). Read via the **Olympus** trackpad IC, not the IMU: `mwdmwd/sc26re`'s `olympus.c` derives both grip buttons from Olympus grip-sense values |
 
 Not visible in any teardown photo at time of writing.
 
