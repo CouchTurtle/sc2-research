@@ -18,9 +18,21 @@ For opcode 0x83 (attribute values), report_bytes is a list of
 For opcode 0xAE / 0xA4 / 0xA6 (strings), it's a single null-terminated string
 preceded by a skip byte.
 
-This is READ-ONLY in effect — we don't change any persistent device state.
+By default this only sends opcodes from GET_OPCODES below, which are the
+read-style entries of SDL3's `FeatureReportMessageIDs` enum. That is not a
+guarantee: the enum is the generic Steam-Controller opcode map, and Triton
+firmware is known to differ (`0x90` reboots to the bootloader and is not in
+SDL3's enum at all). Treat every opcode as unverified on this hardware.
+
+An earlier version of this file swept every opcode from 0x80 to 0xCF and
+described itself as read-only. It was not: that range contains FACTORY_RESET
+(0x86), CLEAR_SETTINGS_VALUES (0x88), TURN_OFF_CONTROLLER (0x9F),
+CALIBRATE_TRACKPADS (0xA7), SET_SERIAL_NUMBER (0xA9), ENABLE_PAIRING (0xAD),
+RADIO_ERASE_RECORDS (0xAF) and the reboot opcodes this repo documents itself.
+The sweep now lives behind --dangerous-probe.
 """
 from __future__ import annotations
+import argparse
 import fcntl
 import os
 import struct
@@ -51,6 +63,59 @@ ATTR_NAMES = {
     15: "data_streaming",
     16: "trackpad_id",
     17: "secondary_trackpad_id",
+}
+
+# Read-style opcodes from SDL3 `controller_constants.h` (FeatureReportMessageIDs).
+# Everything not listed here is either known to mutate device state or unknown,
+# and is only sent under --dangerous-probe.
+GET_OPCODES: dict[int, str] = {
+    0x82: "GET_DIGITAL_MAPPINGS",
+    0x83: "GET_ATTRIBUTES_VALUES",
+    0x84: "GET_ATTRIBUTE_LABEL",
+    0x89: "GET_SETTINGS_VALUES",
+    0x8A: "GET_SETTING_LABEL",
+    0x8B: "GET_SETTINGS_MAXS",
+    0x8C: "GET_SETTINGS_DEFAULTS",
+    0xA1: "GET_DEVICE_INFO",
+    0xAA: "GET_TRACKPAD_CALIBRATION",
+    0xAB: "GET_TRACKPAD_FACTORY_CALIBRATION",
+    0xAE: "GET_STRING_ATTRIBUTE",
+    0xB4: "DONGLE_GET_WIRELESS_STATE",
+    0xBA: "GET_CHIPID",
+    0xC4: "DONGLE_GET_CONNECTED_SLOTS",
+}
+
+# Opcodes in 0x80..0xCF that are known to change persistent state or power.
+# Shown to the user before --dangerous-probe runs.
+DESTRUCTIVE_OPCODES: dict[int, str] = {
+    0x80: "SET_DIGITAL_MAPPINGS",
+    0x81: "CLEAR_DIGITAL_MAPPINGS",
+    0x85: "SET_DEFAULT_DIGITAL_MAPPINGS",
+    0x86: "FACTORY_RESET",
+    0x87: "SET_SETTINGS_VALUES",
+    0x88: "CLEAR_SETTINGS_VALUES",
+    0x8D: "SET_CONTROLLER_MODE",
+    0x8E: "LOAD_DEFAULT_SETTINGS",
+    0x90: "REBOOT_TO_BOOTLOADER (Triton-specific, not in SDL3)",
+    0x95: "FIRMWARE_UPDATE_REBOOT (Triton-specific, not in SDL3)",
+    0x9F: "TURN_OFF_CONTROLLER",
+    0xA7: "CALIBRATE_TRACKPADS",
+    0xA9: "SET_SERIAL_NUMBER",
+    0xAD: "ENABLE_PAIRING",
+    0xAF: "RADIO_ERASE_RECORDS",
+    0xB0: "RADIO_WRITE_RECORD",
+    0xB1: "SET_DONGLE_SETTING",
+    0xB2: "DONGLE_DISCONNECT_DEVICE",
+    0xB3: "DONGLE_COMMIT_DEVICE",
+    0xB5: "CALIBRATE_GYRO",
+    0xB7: "AUDIO_UPDATE_START",
+    0xB8: "AUDIO_UPDATE_DATA",
+    0xB9: "AUDIO_UPDATE_COMPLETE",
+    0xBF: "CALIBRATE_JOYSTICK",
+    0xC0: "CALIBRATE_ANALOG_TRIGGERS",
+    0xC1: "SET_AUDIO_MAPPING",
+    0xC3: "CALIBRATE_ANALOG",
+    0xCE: "RESET_IMU",
 }
 
 
@@ -137,91 +202,100 @@ def query_str_attribute(devpath: str, fr_id: int, op: int, attribute_number: int
         os.close(fd)
 
 
-def probe_opcodes(devpath: str, fr_id: int, opcodes: list[int]):
-    """Try many opcodes and show whatever comes back."""
-    fd = os.open(devpath, os.O_RDWR)
-    try:
-        for op in opcodes:
-            try:
-                send_feature(fd, pad_hid_fr(bytes([fr_id, op])))
-                resp = get_feature(fd, fr_id, HID_LEN + 1)
-                rt = resp[1]
-                rl = resp[2]
-                data = resp[3 : 3 + rl]
-                if rl > 0:
-                    print(f"    op=0x{op:02x}: type=0x{rt:02x} len={rl} data={data.hex()[:80]}")
-                else:
-                    pass  # silently skip empty
-            except OSError as e:
-                if e.errno != 32:  # ignore broken pipe spam
-                    print(f"    op=0x{op:02x}: {e}")
-    finally:
-        os.close(fd)
-
-
 def safe(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
     except Exception as e:
-        return f"ERROR: {type(e).__name__}: {e}"
+        print(f"    ERROR: {type(e).__name__}: {e}", file=sys.stderr)
+        return None
+
+
+def probe_range(dev: str, fr_id: int, opcodes: list[int], names: dict[int, str]):
+    """Send each opcode once and print any non-empty response."""
+    for op in opcodes:
+        try:
+            fd = os.open(dev, os.O_RDWR)
+            try:
+                send_feature(fd, pad_hid_fr(bytes([fr_id, op])))
+                resp = get_feature(fd, fr_id, HID_LEN + 1)
+                rl = resp[2]
+                if rl > 0:
+                    rt = resp[1]
+                    data = resp[3 : 3 + rl]
+                    label = names.get(op, "")
+                    print(f"  fr_id={fr_id} op=0x{op:02x} {label:<34} "
+                          f"type=0x{rt:02x} len={rl:>3d} data={data.hex()[:100]}")
+            finally:
+                os.close(fd)
+        except OSError as e:
+            if e.errno != 32:  # ignore broken-pipe spam
+                print(f"  fr_id={fr_id} op=0x{op:02x}: {e}", file=sys.stderr)
+
+
+def confirm_dangerous() -> bool:
+    print("!" * 68)
+    print(" --dangerous-probe sends EVERY opcode from 0x80 to 0xCF.")
+    print(" That range includes commands which change persistent device state:")
+    print("!" * 68)
+    for op in sorted(DESTRUCTIVE_OPCODES):
+        print(f"   0x{op:02x}  {DESTRUCTIVE_OPCODES[op]}")
+    print()
+    print(" Possible consequences: factory reset, wiped pairing/radio records,")
+    print(" lost trackpad/gyro/joystick calibration, overwritten serial number,")
+    print(" the device powering off or rebooting into its bootloader.")
+    print()
+    print(" Only do this on a device you are willing to re-pair and re-calibrate.")
+    print(" Empty payloads MAY be rejected by the firmware. That is unverified.")
+    print()
+    return input(" Type 'I understand' to continue: ").strip() == "I understand"
 
 
 def main():
-    dev = "/dev/hidraw9"
-    print(f"=== Live Feature-Report probe on {dev} ===\n")
+    ap = argparse.ArgumentParser(description="Query SC2 device attributes via HID Feature-Reports.")
+    ap.add_argument("--dev", default="/dev/hidraw9", help="hidraw node (default: /dev/hidraw9)")
+    ap.add_argument("--dangerous-probe", action="store_true",
+                    help="sweep ALL opcodes 0x80-0xCF, including state-changing ones")
+    args = ap.parse_args()
+    dev = args.dev
+
+    print(f"=== Feature-Report probe on {dev} ===\n")
 
     print("=" * 60)
-    print(" PUCK (Proteus) attributes — fr_id=2, op=0x83")
+    print(" PUCK (Proteus) attributes: fr_id=2, op=0x83")
     print("=" * 60)
     safe(query_attributes, dev, 2, 0x83)
 
     print()
     print("=" * 60)
-    print(" CONTROLLER (Triton via ESB) attributes — fr_id=1, op=0x83")
+    print(" CONTROLLER (Triton via ESB) attributes: fr_id=1, op=0x83")
     print("=" * 60)
     safe(query_attributes, dev, 1, 0x83)
 
-    print()
-    print("=" * 60)
-    print(" Brute-force opcode probe (fr_id=1 = Controller path)")
-    print("=" * 60)
-    for op in range(0x80, 0xD0):
-        try:
-            fd = os.open(dev, os.O_RDWR)
-            try:
-                send_feature(fd, pad_hid_fr(bytes([1, op])))
-                resp = get_feature(fd, 1, HID_LEN + 1)
-                rl = resp[2]
-                if rl > 0:
-                    rt = resp[1]
-                    data = resp[3 : 3 + rl]
-                    print(f"  fr_id=1 op=0x{op:02x}: type=0x{rt:02x} len={rl:>3d} data={data.hex()[:100]}")
-            finally:
-                os.close(fd)
-        except OSError as e:
-            if e.errno != 32:
-                print(f"  fr_id=1 op=0x{op:02x}: {e}")
+    for fr_id, who in ((1, "Controller"), (2, "Puck")):
+        print()
+        print("=" * 60)
+        print(f" Read-style opcodes (fr_id={fr_id} = {who} path)")
+        print("=" * 60)
+        probe_range(dev, fr_id, sorted(GET_OPCODES), GET_OPCODES)
+
+    if not args.dangerous_probe:
+        print()
+        print("Skipped the full 0x80-0xCF sweep. It can reset, re-pair, re-calibrate")
+        print("or power off the device. Pass --dangerous-probe if you accept that.")
+        return
 
     print()
-    print("=" * 60)
-    print(" Brute-force opcode probe (fr_id=2 = Puck path)")
-    print("=" * 60)
-    for op in range(0x80, 0xD0):
-        try:
-            fd = os.open(dev, os.O_RDWR)
-            try:
-                send_feature(fd, pad_hid_fr(bytes([2, op])))
-                resp = get_feature(fd, 2, HID_LEN + 1)
-                rl = resp[2]
-                if rl > 0:
-                    rt = resp[1]
-                    data = resp[3 : 3 + rl]
-                    print(f"  fr_id=2 op=0x{op:02x}: type=0x{rt:02x} len={rl:>3d} data={data.hex()[:100]}")
-            finally:
-                os.close(fd)
-        except OSError as e:
-            if e.errno != 32:
-                print(f"  fr_id=2 op=0x{op:02x}: {e}")
+    if not confirm_dangerous():
+        print("Aborted.")
+        return
+
+    names = {**GET_OPCODES, **DESTRUCTIVE_OPCODES}
+    for fr_id, who in ((1, "Controller"), (2, "Puck")):
+        print()
+        print("=" * 60)
+        print(f" FULL opcode sweep (fr_id={fr_id} = {who} path)")
+        print("=" * 60)
+        probe_range(dev, fr_id, list(range(0x80, 0xD0)), names)
 
 
 if __name__ == "__main__":

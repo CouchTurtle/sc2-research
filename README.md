@@ -31,7 +31,7 @@ Firmware analysis & extraction:
 | `tools/extract_pyinst.py` | Minimal PyInstaller bundle extractor: MEI cookie + TOC walker. |
 | `tools/walk_pyc.py` | Walks marshaled Python code objects, lists nested functions + constants. |
 | `tools/analyze_fw.py` | Parses ARM Cortex-M firmware blobs (header, vector table, IRQ handlers, strings). |
-| `tools/attr_query.py` | Sends HID Feature-Reports via `ioctl` to query device attributes. |
+| `tools/attr_query.py` | Sends HID Feature-Reports via `ioctl` to query device attributes. Only read-style opcodes by default. The full `0x80`-`0xCF` sweep is behind `--dangerous-probe` because that range contains factory reset, pairing erase, calibration and power-off commands. |
 | `tools/fw_changelog.py` | Diffs two firmware versions (or sweeps the whole archive) into a plain "what changed" report: size, and which strings appeared or vanished. Pulls the blobs from the Ibex-Firmware archive, so no controller is needed. |
 
 Live capture & observation:
@@ -45,10 +45,10 @@ Live capture & observation:
 ## Quick start
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/CouchTurtle/sc2-research
 cd sc2-research
 
-# Probe puck + controller via HID Feature-Reports
+# Probe puck + controller via HID Feature-Reports (read-style opcodes only)
 python3 tools/attr_query.py
 
 # Extract Steam's firmware updater

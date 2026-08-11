@@ -130,7 +130,9 @@ For a wireless dongle: the same HID path is often a **bidirectional multiplexer*
 - `fr_id=2` with `op=0x83` → response from the puck itself (local)
 - `fr_id=1` with `op=0x83` → response from the controller (routed via ESB). Same opcode, `fr_id` selects the target
 
-→ Collect ALL fr_id/op combinations via brute-force (0x80..0xCF, both fr_ids). What comes back tells you which channels exist.
+→ To find out which channels exist, walk the **read** opcodes for each `fr_id` and see what answers.
+
+Do not sweep the whole `0x80..0xCF` range on hardware you care about, which is what an earlier version of this section suggested. SDL3's `FeatureReportMessageIDs` puts `FACTORY_RESET` (`0x86`), `CLEAR_SETTINGS_VALUES` (`0x88`), `TURN_OFF_CONTROLLER` (`0x9F`), `CALIBRATE_TRACKPADS` (`0xA7`), `SET_SERIAL_NUMBER` (`0xA9`), `ENABLE_PAIRING` (`0xAD`) and `RADIO_ERASE_RECORDS` (`0xAF`) in that range, and the reboot opcodes documented in [`FIRMWARE_PROTOCOL.md`](FIRMWARE_PROTOCOL.md) (`0x90`, `0x95`) sit in it too. An empty payload might get rejected, but nothing guarantees that. `tools/attr_query.py` sends the read-style opcodes by default and keeps the full sweep behind `--dangerous-probe`.
 
 ## Reusable Tooling Patterns
 
