@@ -27,7 +27,7 @@ For Triton/SC2 specifically, the three highest-leverage sources are:
 
 With those three, empirical captures become **verification**, not discovery.
 
-The codenames are layered: marketing "Steam Controller 2" / hardware "Ibex" or "Triton" / firmware-filename "IBEX_FW" / Wireless "ESB". `Triton` and `Ibex` were datamined publicly in Q4 2025; `Proteus` (puck) and `Nereid` (unknown role, `EDeviceType=6`) come out of `hardwareupdater.py` and are first publicly documented in this project. When you have one name, grep every binary for related strings. The others fall out.
+The codenames are layered: marketing "Steam Controller 2" / hardware "Ibex" or "Triton" / firmware-filename "IBEX_FW" / Wireless "ESB". `Triton` and `Ibex` were datamined publicly in Q4 2025; `Proteus` (puck) and `Nereid` (the receiver built into the Steam Machine, `EDeviceType=6`) come out of `hardwareupdater.py` and are first publicly documented in this project. When you have one name, grep every binary for related strings. The others fall out.
 
 Privacy: redact USB iSerial strings and per-device serial numbers (`FX*`) before sharing captures. Firmware file hashes and the `hardware_id` integer (model revision) are not PII.
 
